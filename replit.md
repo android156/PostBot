@@ -126,5 +126,7 @@ The architecture is designed to be scalable and maintainable, with clear separat
 ### Current Status
 - Bot is operational and waiting for user interactions
 - All core functionality tested and working
-- API integration successfully authenticated
+- API integration successfully authenticated using proper documentation
 - Excel processing handles the provided sample file format
+- API endpoints for cost calculation are being explored - standard endpoints return 404
+- System shows detailed status information for routes with proper city name resolution

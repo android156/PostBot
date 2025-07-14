@@ -100,31 +100,53 @@ class TopExAPI:
         """
         try:
             if not await self._ensure_authenticated():
-                raise Exception("Не удалось авторизоваться в TOP-EX API")
+                return {
+                    "Статус": "❌ Ошибка аутентификации",
+                    "Сообщение": "Не удалось авторизоваться в TOP-EX API"
+                }
                 
-            # For this implementation, we'll use the address book to search for cities
-            # and then calculate costs. In a real implementation, you might need
-            # to use specific calculation endpoints.
-            
-            # First, try to find city codes
+            # Найдем коды городов в локальной базе данных
             origin_code = await self._find_city_code(origin)
             destination_code = await self._find_city_code(destination)
             
             if not origin_code or not destination_code:
-                # If we can't find city codes, return a message
+                missing_cities = []
+                if not origin_code:
+                    missing_cities.append(f"отправления: {origin}")
+                if not destination_code:
+                    missing_cities.append(f"назначения: {destination}")
+                
                 return {
-                    "Статус": f"Не найдены коды городов: {origin} -> {destination}"
+                    "Статус": "❌ Города не найдены",
+                    "Сообщение": f"Не найдены коды городов {', '.join(missing_cities)}",
+                    "Рекомендация": "Проверьте правильность названий городов"
                 }
                 
-            # For demonstration, we'll return placeholder costs
-            # In a real implementation, you would call the actual calculation API
+            # Попробуем получить стоимость доставки
             costs = await self._get_shipping_costs(origin_code, destination_code, weight)
+            
+            # Если API endpoint не найден, возвращаем полезную информацию
+            if costs.get('status') == 'endpoint_not_found':
+                origin_name = get_city_name_by_code(origin_code) or origin
+                destination_name = get_city_name_by_code(destination_code) or destination
+                
+                return {
+                    "Маршрут": f"{origin_name} → {destination_name}",
+                    "Вес": f"{weight} г",
+                    "Статус": "✅ Коды городов найдены в базе данных",
+                    "Отправление": f"{origin_name} ({origin_code[:8]}...)",
+                    "Назначение": f"{destination_name} ({destination_code[:8]}...)",
+                    "Примечание": "⚠️ Для получения точной стоимости требуется настройка API расчета"
+                }
             
             return costs
             
         except Exception as e:
             logger.error(f"Error calculating shipping cost: {e}")
-            raise
+            return {
+                "Статус": "❌ Ошибка расчета",
+                "Сообщение": str(e)
+            }
             
     async def _find_city_code(self, city_name: str) -> Optional[str]:
         """Find city code by name using local database."""
@@ -148,72 +170,90 @@ class TopExAPI:
         try:
             await self._ensure_session()
             
-            # Попробуем симулировать реальный расчет стоимости
-            # В реальном проекте здесь должен быть вызов соответствующего API
             logger.info(f"Calculating shipping cost: {origin_code} -> {destination_code}, weight: {weight}g")
             
-            # Попробуем использовать корневой endpoint с параметрами для расчета
-            calc_url = self.base_url
-            
-            # Тестируем различные варианты параметров для расчета стоимости
-            param_variants = [
-                {
-                    'authToken': self.auth_token,
-                    'method': 'calcOrderCosts',
-                    'fromCity': origin_code,
-                    'toCity': destination_code,
-                    'weight': weight,
-                    'serviceType': 'DELIVERY'
-                },
-                {
-                    'authToken': self.auth_token,
-                    'action': 'calcOrderCosts',
-                    'origin': origin_code,
-                    'destination': destination_code,
-                    'weight': weight
-                },
-                {
-                    'authToken': self.auth_token,
-                    'service': 'calcOrderCosts',
-                    'cityFrom': origin_code,
-                    'cityTo': destination_code,
-                    'weight': weight
-                }
+            # Пробуем различные endpoints для расчета стоимости доставки
+            endpoints = [
+                "/express/calculate",
+                "/express/cost", 
+                "/express/price",
+                "/express/delivery/cost",
+                "/delivery/calculate",
+                "/calculate",
+                "/cost",
+                "/price",
+                "/express",
+                "/express/quote",
+                "/quote"
             ]
             
-            for params in param_variants:
-                try:
-                    async with self.session.get(calc_url, params=params, timeout=10) as response:
-                        if response.status == 200:
-                            data = await response.json()
-                            if data.get('status'):
-                                logger.info(f"Successfully calculated costs!")
-                                return self._format_costs_response(data)
-                            elif not data.get('status') and data.get('error'):
-                                logger.warning(f"API error: {data.get('error')}")
+            for endpoint in endpoints:
+                url = f"{self.base_url}{endpoint}"
+                
+                # Пробуем разные варианты параметров
+                params_variants = [
+                    {
+                        'authToken': self.auth_token,
+                        'from': origin_code,
+                        'to': destination_code,
+                        'weight': weight
+                    },
+                    {
+                        'authToken': self.auth_token,
+                        'origin': origin_code,
+                        'destination': destination_code,
+                        'weight': weight,
+                        'type': 'express'
+                    },
+                    {
+                        'authToken': self.auth_token,
+                        'fromCity': origin_code,
+                        'toCity': destination_code,
+                        'weight': weight,
+                        'service': 'express'
+                    }
+                ]
+                
+                for params in params_variants:
+                    try:
+                        # Пробуем GET запрос
+                        async with self.session.get(url, params=params, timeout=30) as response:
+                            if response.status == 200:
+                                data = await response.json()
+                                if data.get('status'):
+                                    logger.info(f"✅ Найден рабочий endpoint: {endpoint}")
+                                    return self._format_costs_response(data)
+                            elif response.status == 404:
+                                continue  # Попробуем следующий endpoint
+                            else:
+                                text = await response.text()
+                                logger.debug(f"Endpoint {endpoint} вернул {response.status}: {text[:100]}")
                                 
-                except Exception as e:
-                    logger.warning(f"Error with parameters: {e}")
-                    continue
+                        # Пробуем POST запрос для того же endpoint
+                        async with self.session.post(url, data=params, timeout=30) as response:
+                            if response.status == 200:
+                                data = await response.json()
+                                if data.get('status'):
+                                    logger.info(f"✅ Найден рабочий endpoint (POST): {endpoint}")
+                                    return self._format_costs_response(data)
+                                
+                    except Exception as e:
+                        logger.debug(f"Ошибка при тестировании {endpoint}: {e}")
+                        continue
             
-            # Если API не работает, возвращаем полезную информацию
-            origin_name = get_city_name_by_code(origin_code) or "Неизвестный город"
-            destination_name = get_city_name_by_code(destination_code) or "Неизвестный город"
-            
+            # Если не найдено рабочего endpoint - возвращаем информацию о проблеме
+            logger.warning("❌ Не найдено рабочих endpoints для расчета стоимости")
             return {
-                "Маршрут": f"{origin_name} → {destination_name}",
-                "Вес": f"{weight} г",
-                "Статус": "Коды городов найдены в базе данных",
-                "Отправление": f"{origin_name} ({origin_code[:8]}...)",
-                "Назначение": f"{destination_name} ({destination_code[:8]}...)",
-                "Примечание": "Для получения точной стоимости требуется настройка API расчета"
+                "status": "endpoint_not_found",
+                "message": "Endpoint для расчета стоимости доставки не найден в API",
+                "suggestion": "Необходимо обратиться к поставщику API для получения правильного endpoint"
             }
             
         except Exception as e:
-            logger.error(f"Error calculating shipping costs: {e}")
+            logger.error(f"❌ Ошибка при запросе стоимости: {e}")
             return {
-                "Статус": "Ошибка при расчете стоимости",
-                "Ошибка": str(e)
+                "status": "error", 
+                "message": f"Ошибка запроса: {str(e)}"
             }
             
     def _format_costs_response(self, data: Dict) -> Dict[str, str]:
