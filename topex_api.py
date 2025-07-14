@@ -166,89 +166,54 @@ class TopExAPI:
             return None
         
     async def _get_shipping_costs(self, origin_code: str, destination_code: str, weight: int) -> Dict[str, str]:
-        """Get shipping costs from different companies."""
+        """Get shipping costs from different companies using the correct TOP-EX API endpoint."""
         try:
             await self._ensure_session()
             
             logger.info(f"Calculating shipping cost: {origin_code} -> {destination_code}, weight: {weight}g")
             
-            # Пробуем различные endpoints для расчета стоимости доставки
-            endpoints = [
-                "/express/calculate",
-                "/express/cost", 
-                "/express/price",
-                "/express/delivery/cost",
-                "/delivery/calculate",
-                "/calculate",
-                "/cost",
-                "/price",
-                "/express",
-                "/express/quote",
-                "/quote"
-            ]
+            # Используем правильный endpoint для расчета стоимости
+            calc_url = f"{self.base_url}/cse/calc"
             
-            for endpoint in endpoints:
-                url = f"{self.base_url}{endpoint}"
-                
-                # Пробуем разные варианты параметров
-                params_variants = [
-                    {
-                        'authToken': self.auth_token,
-                        'from': origin_code,
-                        'to': destination_code,
-                        'weight': weight
-                    },
-                    {
-                        'authToken': self.auth_token,
-                        'origin': origin_code,
-                        'destination': destination_code,
-                        'weight': weight,
-                        'type': 'express'
-                    },
-                    {
-                        'authToken': self.auth_token,
-                        'fromCity': origin_code,
-                        'toCity': destination_code,
-                        'weight': weight,
-                        'service': 'express'
-                    }
-                ]
-                
-                for params in params_variants:
-                    try:
-                        # Пробуем GET запрос
-                        async with self.session.get(url, params=params, timeout=30) as response:
-                            if response.status == 200:
-                                data = await response.json()
-                                if data.get('status'):
-                                    logger.info(f"✅ Найден рабочий endpoint: {endpoint}")
-                                    return self._format_costs_response(data)
-                            elif response.status == 404:
-                                continue  # Попробуем следующий endpoint
-                            else:
-                                text = await response.text()
-                                logger.debug(f"Endpoint {endpoint} вернул {response.status}: {text[:100]}")
-                                
-                        # Пробуем POST запрос для того же endpoint
-                        async with self.session.post(url, data=params, timeout=30) as response:
-                            if response.status == 200:
-                                data = await response.json()
-                                if data.get('status'):
-                                    logger.info(f"✅ Найден рабочий endpoint (POST): {endpoint}")
-                                    return self._format_costs_response(data)
-                                
-                    except Exception as e:
-                        logger.debug(f"Ошибка при тестировании {endpoint}: {e}")
-                        continue
-            
-            # Если не найдено рабочего endpoint - возвращаем информацию о проблеме
-            logger.warning("❌ Не найдено рабочих endpoints для расчета стоимости")
-            return {
-                "status": "endpoint_not_found",
-                "message": "Endpoint для расчета стоимости доставки не найден в API",
-                "suggestion": "Необходимо обратиться к поставщику API для получения правильного endpoint"
+            # Параметры согласно документации
+            params = {
+                'authToken': self.auth_token,
+                'attributes[user_id]': '14',  # Значение из документации
+                'attributes[sender_city]': origin_code,
+                'attributes[recipient_city]': destination_code,
+                'attributes[cargo_type]': '4aab1fc6-fc2b-473a-8728-58bcd4ff79ba',  # Для груза
+                'attributes[cargo_seats_number]': '1',  # По умолчанию 1 место
+                'attributes[cargo_weight]': str(weight)  # Вес в граммах
             }
             
+            logger.info(f"Запрос к API: {calc_url}")
+            logger.debug(f"Параметры: {params}")
+            
+            async with self.session.get(calc_url, params=params, timeout=30) as response:
+                logger.info(f"Ответ API: статус {response.status}")
+                
+                if response.status == 200:
+                    data = await response.json()
+                    logger.info(f"Данные получены: {data}")
+                    
+                    if data.get('status'):
+                        logger.info("✅ Успешно получены данные о стоимости доставки")
+                        return self._format_costs_response(data)
+                    else:
+                        error_msg = data.get('error', 'Неизвестная ошибка API')
+                        logger.error(f"❌ Ошибка API: {error_msg}")
+                        return {
+                            "status": "api_error",
+                            "message": f"Ошибка API: {error_msg}"
+                        }
+                else:
+                    text = await response.text()
+                    logger.error(f"❌ HTTP ошибка {response.status}: {text[:200]}")
+                    return {
+                        "status": "http_error",
+                        "message": f"HTTP ошибка {response.status}: {text[:100]}"
+                    }
+                    
         except Exception as e:
             logger.error(f"❌ Ошибка при запросе стоимости: {e}")
             return {
@@ -259,30 +224,64 @@ class TopExAPI:
     def _format_costs_response(self, data: Dict) -> Dict[str, str]:
         """Format the API response into a readable format."""
         try:
-            # Обработаем различные возможные форматы ответа
-            if 'costs' in data:
-                costs = data['costs']
-                formatted = {}
-                for company, cost in costs.items():
-                    formatted[f"{company}"] = f"{cost} руб."
+            logger.info(f"Форматирую ответ API: {data}")
+            
+            formatted = {}
+            
+            # Проверяем различные форматы ответа от TOP-EX API
+            if 'items' in data and data['items']:
+                # Обрабатываем массив элементов с расценками
+                items = data['items']
+                logger.info(f"Найдено {len(items)} элементов с расценками")
+                
+                for i, item in enumerate(items):
+                    # Получаем информацию о компании
+                    company_name = item.get('company_name', f'Компания {i+1}')
+                    
+                    # Получаем стоимость
+                    cost = item.get('cost', item.get('price', 'Не указано'))
+                    if isinstance(cost, (int, float)):
+                        cost_str = f"{cost} руб."
+                    else:
+                        cost_str = str(cost)
+                    
+                    # Получаем время доставки
+                    delivery_time = item.get('delivery_time', item.get('time', ''))
+                    if delivery_time:
+                        formatted[f"{company_name} (доставка {delivery_time})"] = cost_str
+                    else:
+                        formatted[company_name] = cost_str
+                
                 return formatted
+                
+            elif 'cost' in data:
+                # Единичная стоимость
+                cost = data['cost']
+                company = data.get('company', 'TOP-EX')
+                formatted[company] = f"{cost} руб."
+                return formatted
+                
             elif 'companies' in data:
+                # Массив компаний
                 companies = data['companies']
-                formatted = {}
                 for company in companies:
                     name = company.get('name', 'Неизвестно')
-                    price = company.get('price', 'Не указано')
+                    price = company.get('price', company.get('cost', 'Не указано'))
                     formatted[name] = f"{price} руб."
                 return formatted
+                
             else:
+                # Неизвестный формат - покажем как есть
+                logger.warning(f"Неизвестный формат ответа: {data}")
                 return {
-                    "Статус": "Ответ получен",
-                    "Данные": str(data)
+                    "Статус": "✅ Ответ получен",
+                    "Данные": str(data)[:500]  # Ограничиваем длину
                 }
+                
         except Exception as e:
             logger.error(f"Error formatting costs response: {e}")
             return {
-                "Статус": "Ошибка форматирования ответа",
+                "Статус": "❌ Ошибка форматирования ответа",
                 "Ошибка": str(e)
             }
         
