@@ -244,7 +244,4 @@ class TelegramBot:
         for part in message_parts:
             await update.message.reply_text(part, parse_mode=ParseMode.MARKDOWN)
             
-    async def start(self):
-        """Start the bot."""
-        logger.info("Starting Telegram bot...")
-        await self.application.run_polling(drop_pending_updates=True, stop_signals=None)
+

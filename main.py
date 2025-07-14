@@ -2,7 +2,6 @@
 """
 Main entry point for the Telegram bot application.
 """
-import asyncio
 import logging
 import sys
 from bot import TelegramBot
@@ -20,30 +19,36 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-async def main():
+def main():
     """Main function to start the bot."""
+    logger.info("Запуск Telegram бота...")
+    
     try:
         # Initialize configuration
         config = Config()
+        logger.info("Конфигурация загружена успешно")
         
-        # Initialize and start the bot
+        # Initialize bot
         bot = TelegramBot(config)
-        await bot.start()
+        logger.info("Бот инициализирован, начинаю опрос...")
+        
+        # Start bot with polling
+        bot.application.run_polling(
+            poll_interval=1.0,
+            timeout=20,
+            bootstrap_retries=3,
+            drop_pending_updates=True
+        )
         
     except Exception as e:
-        logger.error(f"Failed to start bot: {e}")
+        logger.error(f"Ошибка запуска бота: {e}")
         sys.exit(1)
 
 if __name__ == "__main__":
     try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(main())
+        main()
     except KeyboardInterrupt:
-        logger.info("Bot stopped by user")
+        logger.info("Бот остановлен пользователем")
     except Exception as e:
-        logger.error(f"Fatal error: {e}")
+        logger.error(f"Критическая ошибка: {e}")
         sys.exit(1)
-    finally:
-        if 'loop' in locals():
-            loop.close()
