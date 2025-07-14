@@ -7,6 +7,7 @@ import logging
 import urllib.parse
 from typing import Dict, Optional, Any
 from config import Config
+from cities_database import find_city_code
 
 logger = logging.getLogger(__name__)
 
@@ -115,58 +116,111 @@ class TopExAPI:
             raise
             
     async def _find_city_code(self, city_name: str) -> Optional[str]:
-        """Find city code by name using the address book."""
+        """Find city code by name using local database."""
         try:
-            await self._ensure_session()
+            # Используем локальную базу кодов городов
+            city_code = find_city_code(city_name)
             
-            # Search in address book for recipients first
-            search_url = f"{self.base_url}/addressBook/list"
-            params = {
-                'authToken': self.auth_token,
-                'type': 'express',
-                'attributes[city]': city_name
-            }
-            
-            async with self.session.get(search_url, params=params) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    
-                    if data.get('status') and data.get('items'):
-                        # Return the first matching city code
-                        return data['items'][0].get('city')
-                        
-            # If no results, try searching by partial name match
-            params['attributes[name]'] = city_name
-            del params['attributes[city]']
-            
-            async with self.session.get(search_url, params=params) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    
-                    if data.get('status') and data.get('items'):
-                        # Return the first matching city code
-                        return data['items'][0].get('city')
-                        
+            if city_code:
+                logger.info(f"Found city code for {city_name}: {city_code}")
+                return city_code
+            else:
+                logger.warning(f"City code not found for: {city_name}")
+                return None
+                
         except Exception as e:
             logger.error(f"Error finding city code for {city_name}: {e}")
-            
-        return None
+            return None
         
     async def _get_shipping_costs(self, origin_code: str, destination_code: str, weight: int) -> Dict[str, str]:
         """Get shipping costs from different companies."""
-        # This is a placeholder implementation
-        # In a real implementation, you would call the actual TOP-EX calculation API
-        
-        # Since the provided API documentation doesn't include shipping calculation endpoints,
-        # we'll return a placeholder response indicating the available information
-        
-        costs = {
-            "TOP-EX": f"Требуется запрос к API расчета (коды городов: {origin_code[:8]}...{destination_code[:8]})",
-            "Статус": f"Вес: {weight}г, найдены коды городов",
-            "Примечание": "Для расчета стоимости требуется доступ к API расчета стоимости"
-        }
-        
-        return costs
+        try:
+            await self._ensure_session()
+            
+            # Попробуем найти endpoint для расчета стоимости доставки
+            # Обычно это может быть /express/calculate или /shipping/calculate
+            calculation_endpoints = [
+                "/express/calculateDelivery",
+                "/express/calculate", 
+                "/shipping/calculate",
+                "/delivery/calculate",
+                "/calculate"
+            ]
+            
+            for endpoint in calculation_endpoints:
+                try:
+                    calc_url = f"{self.base_url}{endpoint}"
+                    params = {
+                        'authToken': self.auth_token,
+                        'origin': origin_code,
+                        'destination': destination_code,
+                        'weight': weight
+                    }
+                    
+                    async with self.session.get(calc_url, params=params, timeout=10) as response:
+                        if response.status == 200:
+                            data = await response.json()
+                            if data.get('status'):
+                                logger.info(f"Successfully calculated costs using {endpoint}")
+                                return self._format_costs_response(data)
+                        elif response.status == 404:
+                            # Endpoint не найден, пробуем следующий
+                            continue
+                        else:
+                            logger.warning(f"API endpoint {endpoint} returned status {response.status}")
+                            
+                except asyncio.TimeoutError:
+                    logger.warning(f"Timeout for endpoint {endpoint}")
+                    continue
+                except Exception as e:
+                    logger.warning(f"Error with endpoint {endpoint}: {e}")
+                    continue
+            
+            # Если все endpoint'ы не работают, возвращаем информацию о том, что коды найдены
+            return {
+                "Статус": "Коды городов найдены успешно",
+                "Отправление": f"Код: {origin_code[:8]}...",
+                "Назначение": f"Код: {destination_code[:8]}...",
+                "Вес": f"{weight}г",
+                "Примечание": "Для получения стоимости требуется доступ к API расчета"
+            }
+            
+        except Exception as e:
+            logger.error(f"Error calculating shipping costs: {e}")
+            return {
+                "Статус": "Ошибка при расчете стоимости",
+                "Ошибка": str(e)
+            }
+            
+    def _format_costs_response(self, data: Dict) -> Dict[str, str]:
+        """Format the API response into a readable format."""
+        try:
+            # Обработаем различные возможные форматы ответа
+            if 'costs' in data:
+                costs = data['costs']
+                formatted = {}
+                for company, cost in costs.items():
+                    formatted[f"{company}"] = f"{cost} руб."
+                return formatted
+            elif 'companies' in data:
+                companies = data['companies']
+                formatted = {}
+                for company in companies:
+                    name = company.get('name', 'Неизвестно')
+                    price = company.get('price', 'Не указано')
+                    formatted[name] = f"{price} руб."
+                return formatted
+            else:
+                return {
+                    "Статус": "Ответ получен",
+                    "Данные": str(data)
+                }
+        except Exception as e:
+            logger.error(f"Error formatting costs response: {e}")
+            return {
+                "Статус": "Ошибка форматирования ответа",
+                "Ошибка": str(e)
+            }
         
     async def close(self):
         """Close the HTTP session."""
