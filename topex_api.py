@@ -5,6 +5,7 @@ import aiohttp
 import asyncio
 import logging
 import urllib.parse
+import time
 from typing import Dict, Optional, Any
 from config import Config
 from cities_database import find_city_code
@@ -21,6 +22,7 @@ class TopExAPI:
         self.auth_token = None
         self.token_expires_at = None
         self.session = None
+        self.token_buffer = 300  # Обновляем токен за 5 минут до истечения
         
     async def _ensure_session(self):
         """Ensure aiohttp session exists."""
@@ -48,12 +50,13 @@ class TopExAPI:
                     
                     if data.get('status'):
                         self.auth_token = data.get('authToken')
-                        self.token_expires_at = data.get('expire', 3600)
+                        expire_seconds = data.get('expire', 3600)
+                        self.token_expires_at = time.time() + expire_seconds
                         
                         # URL encode the token for safe transmission
                         self.auth_token = urllib.parse.quote(self.auth_token, safe='')
                         
-                        logger.info("Successfully authenticated with TOP-EX API")
+                        logger.info(f"Successfully authenticated with TOP-EX API, token expires in {expire_seconds} seconds")
                         return True
                     else:
                         logger.error(f"Authentication failed: {data.get('error', 'Unknown error')}")
@@ -68,12 +71,20 @@ class TopExAPI:
             
     async def _ensure_authenticated(self) -> bool:
         """Ensure we have a valid auth token."""
-        if not self.auth_token:
-            return await self._authenticate()
+        current_time = time.time()
+        
+        # Проверяем, есть ли токен и не истек ли он
+        if (self.auth_token is None or 
+            self.token_expires_at is None or 
+            current_time >= (self.token_expires_at - self.token_buffer)):
             
-        # For simplicity, we'll re-authenticate for each calculation
-        # In production, you might want to implement token refresh logic
-        return await self._authenticate()
+            logger.info("Token is missing or about to expire, refreshing...")
+            return await self._authenticate()
+        
+        # Токен еще действителен
+        remaining_time = self.token_expires_at - current_time
+        logger.debug(f"Token is valid for {remaining_time:.0f} more seconds")
+        return True
         
     async def calculate_shipping_cost(self, origin: str, destination: str, weight: int) -> Dict[str, str]:
         """

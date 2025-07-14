@@ -4,8 +4,10 @@ Main entry point for the Telegram bot application.
 """
 import logging
 import sys
+import asyncio
 from bot import TelegramBot
 from config import Config
+from topex_api import TopExAPI
 
 # Configure logging
 logging.basicConfig(
@@ -19,6 +21,20 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+async def initialize_api(config: Config) -> TopExAPI:
+    """Initialize and pre-authenticate TOP-EX API client."""
+    try:
+        api = TopExAPI(config)
+        if await api._ensure_authenticated():
+            logger.info("TOP-EX API предварительно аутентифицирован")
+            return api
+        else:
+            logger.error("Не удалось аутентифицироваться с TOP-EX API")
+            return None
+    except Exception as e:
+        logger.error(f"Ошибка инициализации API: {e}")
+        return None
+
 def main():
     """Main function to start the bot."""
     logger.info("Запуск Telegram бота...")
@@ -27,6 +43,9 @@ def main():
         # Initialize configuration
         config = Config()
         logger.info("Конфигурация загружена успешно")
+        
+        # Pre-authenticate API client (будет выполнено при первом запросе)
+        logger.info("API будет аутентифицирован при первом запросе")
         
         # Initialize bot
         bot = TelegramBot(config)
