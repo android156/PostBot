@@ -8,7 +8,7 @@ import urllib.parse
 import time
 from typing import Dict, Optional, Any
 from config import Config
-from cities_database import find_city_code
+from cities_database import find_city_code, get_city_name_by_code
 
 logger = logging.getLogger(__name__)
 
@@ -148,52 +148,65 @@ class TopExAPI:
         try:
             await self._ensure_session()
             
-            # Попробуем найти endpoint для расчета стоимости доставки
-            # Обычно это может быть /express/calculate или /shipping/calculate
-            calculation_endpoints = [
-                "/express/calculateDelivery",
-                "/express/calculate", 
-                "/shipping/calculate",
-                "/delivery/calculate",
-                "/calculate"
+            # Попробуем симулировать реальный расчет стоимости
+            # В реальном проекте здесь должен быть вызов соответствующего API
+            logger.info(f"Calculating shipping cost: {origin_code} -> {destination_code}, weight: {weight}g")
+            
+            # Попробуем использовать корневой endpoint с параметрами для расчета
+            calc_url = self.base_url
+            
+            # Тестируем различные варианты параметров для расчета стоимости
+            param_variants = [
+                {
+                    'authToken': self.auth_token,
+                    'method': 'calcOrderCosts',
+                    'fromCity': origin_code,
+                    'toCity': destination_code,
+                    'weight': weight,
+                    'serviceType': 'DELIVERY'
+                },
+                {
+                    'authToken': self.auth_token,
+                    'action': 'calcOrderCosts',
+                    'origin': origin_code,
+                    'destination': destination_code,
+                    'weight': weight
+                },
+                {
+                    'authToken': self.auth_token,
+                    'service': 'calcOrderCosts',
+                    'cityFrom': origin_code,
+                    'cityTo': destination_code,
+                    'weight': weight
+                }
             ]
             
-            for endpoint in calculation_endpoints:
+            for params in param_variants:
                 try:
-                    calc_url = f"{self.base_url}{endpoint}"
-                    params = {
-                        'authToken': self.auth_token,
-                        'origin': origin_code,
-                        'destination': destination_code,
-                        'weight': weight
-                    }
-                    
                     async with self.session.get(calc_url, params=params, timeout=10) as response:
                         if response.status == 200:
                             data = await response.json()
                             if data.get('status'):
-                                logger.info(f"Successfully calculated costs using {endpoint}")
+                                logger.info(f"Successfully calculated costs!")
                                 return self._format_costs_response(data)
-                        elif response.status == 404:
-                            # Endpoint не найден, пробуем следующий
-                            continue
-                        else:
-                            logger.warning(f"API endpoint {endpoint} returned status {response.status}")
-                            
-                except asyncio.TimeoutError:
-                    logger.warning(f"Timeout for endpoint {endpoint}")
-                    continue
+                            elif not data.get('status') and data.get('error'):
+                                logger.warning(f"API error: {data.get('error')}")
+                                
                 except Exception as e:
-                    logger.warning(f"Error with endpoint {endpoint}: {e}")
+                    logger.warning(f"Error with parameters: {e}")
                     continue
             
-            # Если все endpoint'ы не работают, возвращаем информацию о том, что коды найдены
+            # Если API не работает, возвращаем полезную информацию
+            origin_name = get_city_name_by_code(origin_code) or "Неизвестный город"
+            destination_name = get_city_name_by_code(destination_code) or "Неизвестный город"
+            
             return {
-                "Статус": "Коды городов найдены успешно",
-                "Отправление": f"Код: {origin_code[:8]}...",
-                "Назначение": f"Код: {destination_code[:8]}...",
-                "Вес": f"{weight}г",
-                "Примечание": "Для получения стоимости требуется доступ к API расчета"
+                "Маршрут": f"{origin_name} → {destination_name}",
+                "Вес": f"{weight} г",
+                "Статус": "Коды городов найдены в базе данных",
+                "Отправление": f"{origin_name} ({origin_code[:8]}...)",
+                "Назначение": f"{destination_name} ({destination_code[:8]}...)",
+                "Примечание": "Для получения точной стоимости требуется настройка API расчета"
             }
             
         except Exception as e:
