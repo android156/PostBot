@@ -228,40 +228,65 @@ class TopExAPI:
             
             formatted = {}
             
-            # Проверяем различные форматы ответа от TOP-EX API
-            if 'items' in data and data['items']:
-                # Обрабатываем массив элементов с расценками
-                items = data['items']
-                logger.info(f"Найдено {len(items)} элементов с расценками")
+            # Проверяем основную структуру TOP-EX API
+            if data.get('status') and 'data' in data and data['data']:
+                # Обрабатываем массив элементов с расценками из поля 'data'
+                items = data['data']
+                logger.info(f"Найдено {len(items)} предложений от компаний")
                 
                 for i, item in enumerate(items):
                     # Получаем информацию о компании
-                    company_name = item.get('deliveryCompanyLabel', item.get('company_name', f'Компания {i+1}'))
+                    company_name = item.get('deliveryCompanyLabel', f'Компания {i+1}')
                     
-                    # Получаем стоимость
-                    cost = item.get('user_price', item.get('retailPrice', item.get('cost', item.get('price', 'Не указано'))))
-                    if isinstance(cost, (int, float)):
-                        cost_str = f"{cost:.2f} руб."
-                    else:
-                        cost_str = str(cost)
+                    # Получаем тариф
+                    tariff_caption = item.get('tariffCaption', '')
                     
                     # Получаем метод доставки
-                    delivery_method = item.get('deliveryMethodLabel', item.get('tariffName', ''))
+                    delivery_method = item.get('deliveryMethodLabel', '')
                     
-                    # Получаем время доставки
-                    delivery_time = item.get('totalDeliveryDaysCount', item.get('minPeriod', ''))
-                    if delivery_time:
-                        time_str = f" ({delivery_time} дн.)"
+                    # Получаем периоды доставки
+                    min_period = item.get('minPeriod', '')
+                    max_period = item.get('maxPeriod', '')
+                    
+                    # Формируем строку с периодом
+                    if min_period and max_period:
+                        period_str = f"{min_period}-{max_period} дн."
+                    elif min_period:
+                        period_str = f"{min_period} дн."
                     else:
-                        time_str = ""
+                        period_str = ""
                     
-                    # Формируем название с учетом метода доставки
+                    # Получаем даты (конвертируем timestamp в формат dd.mm.yy)
+                    pickup_date = self._format_date(item.get('pickupDate'))
+                    delivery_date = self._format_date(item.get('deliveryDate'))
+                    
+                    # Получаем стоимости
+                    user_price = item.get('user_price', 0)
+                    retail_price = item.get('retailPrice', 0)
+                    
+                    # Формируем название предложения
+                    name_parts = [company_name]
+                    if tariff_caption:
+                        name_parts.append(tariff_caption)
                     if delivery_method:
-                        full_name = f"{company_name} - {delivery_method}{time_str}"
-                    else:
-                        full_name = f"{company_name}{time_str}"
+                        name_parts.append(delivery_method)
                     
-                    formatted[full_name] = cost_str
+                    offer_name = " - ".join(name_parts)
+                    
+                    # Формируем детальную информацию о предложении
+                    details = []
+                    if user_price:
+                        details.append(f"Цена: {user_price:.2f} руб.")
+                    if retail_price and retail_price != user_price:
+                        details.append(f"Розничная: {retail_price:.2f} руб.")
+                    if period_str:
+                        details.append(f"Срок: {period_str}")
+                    if pickup_date:
+                        details.append(f"Забор: {pickup_date}")
+                    if delivery_date:
+                        details.append(f"Доставка: {delivery_date}")
+                    
+                    formatted[offer_name] = " | ".join(details)
                 
                 return formatted
                 
@@ -295,6 +320,19 @@ class TopExAPI:
                 "Статус": "❌ Ошибка форматирования ответа",
                 "Ошибка": str(e)
             }
+    
+    def _format_date(self, timestamp):
+        """Convert timestamp to dd.mm.yy format."""
+        try:
+            if timestamp:
+                import datetime
+                # Конвертируем timestamp в дату
+                date_obj = datetime.datetime.fromtimestamp(timestamp)
+                return date_obj.strftime("%d.%m.%y")
+            return ""
+        except Exception as e:
+            logger.error(f"Error formatting date {timestamp}: {e}")
+            return ""
         
     async def close(self):
         """Close the HTTP session."""

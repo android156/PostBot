@@ -130,5 +130,9 @@ The architecture is designed to be scalable and maintainable, with clear separat
 - Excel processing handles the provided sample file format
 - **NEW**: Found correct API endpoint for cost calculation: `/cse/calc`
 - **NEW**: Integrated proper parameters for shipping cost calculation
-- System shows detailed status information for routes with proper city name resolution
-- Ready to get real shipping costs from TOP-EX API
+- **NEW**: Fixed Telegram message parsing errors that prevented results display
+- **NEW**: Implemented comprehensive JSON response parsing for all required fields
+- **NEW**: Added date formatting (timestamp to dd.mm.yy format)
+- **NEW**: Enhanced result formatting with detailed shipping information
+- System now properly displays real shipping costs from TOP-EX API with full details
+- Bot successfully processes and displays all company offers with tariffs, delivery methods, dates, and pricing
