@@ -236,21 +236,32 @@ class TopExAPI:
                 
                 for i, item in enumerate(items):
                     # Получаем информацию о компании
-                    company_name = item.get('company_name', f'Компания {i+1}')
+                    company_name = item.get('deliveryCompanyLabel', item.get('company_name', f'Компания {i+1}'))
                     
                     # Получаем стоимость
-                    cost = item.get('cost', item.get('price', 'Не указано'))
+                    cost = item.get('user_price', item.get('retailPrice', item.get('cost', item.get('price', 'Не указано'))))
                     if isinstance(cost, (int, float)):
-                        cost_str = f"{cost} руб."
+                        cost_str = f"{cost:.2f} руб."
                     else:
                         cost_str = str(cost)
                     
+                    # Получаем метод доставки
+                    delivery_method = item.get('deliveryMethodLabel', item.get('tariffName', ''))
+                    
                     # Получаем время доставки
-                    delivery_time = item.get('delivery_time', item.get('time', ''))
+                    delivery_time = item.get('totalDeliveryDaysCount', item.get('minPeriod', ''))
                     if delivery_time:
-                        formatted[f"{company_name} (доставка {delivery_time})"] = cost_str
+                        time_str = f" ({delivery_time} дн.)"
                     else:
-                        formatted[company_name] = cost_str
+                        time_str = ""
+                    
+                    # Формируем название с учетом метода доставки
+                    if delivery_method:
+                        full_name = f"{company_name} - {delivery_method}{time_str}"
+                    else:
+                        full_name = f"{company_name}{time_str}"
+                    
+                    formatted[full_name] = cost_str
                 
                 return formatted
                 

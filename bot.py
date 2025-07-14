@@ -193,55 +193,48 @@ class TelegramBot:
         total_routes = len(results)
         successful_routes = len([r for r in results if r['error'] is None])
         
-        summary = f"""
-📊 **Результаты расчета стоимости доставки**
+        summary = f"""📊 Результаты расчета стоимости доставки
 
 📈 Обработано маршрутов: {total_routes}
 ✅ Успешно: {successful_routes}
 ❌ Ошибок: {total_routes - successful_routes}
 
----
-        """
+---"""
         
-        # Format results for each route
-        message_parts = [summary]
-        current_message = ""
+        # Send summary first
+        await update.message.reply_text(summary)
         
+        # Format and send results for each route
         for result in results:
-            route_text = f"""
-🚚 **Маршрут {result['route_number']}**
+            try:
+                route_text = f"""🚚 Маршрут {result['route_number']}
 📍 Откуда: {result['origin']}
 📍 Куда: {result['destination']}
 ⚖️ Вес: {result['weight']} г
 
 """
-            
-            if result['error']:
-                route_text += f"❌ Ошибка: {result['error']}\n"
-            elif result['costs']:
-                route_text += "💰 **Стоимость доставки:**\n"
-                for company, cost in result['costs'].items():
-                    route_text += f"• {company}: {cost}\n"
-            else:
-                route_text += "❌ Не удалось получить стоимость\n"
                 
-            route_text += "---\n"
-            
-            # Check if adding this route would exceed message length limit
-            if len(current_message + route_text) > 4000:
-                # Send current message and start new one
-                if current_message:
-                    message_parts.append(current_message)
-                current_message = route_text
-            else:
-                current_message += route_text
+                if result['error']:
+                    route_text += f"❌ Ошибка: {result['error']}"
+                elif result['costs']:
+                    route_text += "💰 Стоимость доставки:\n"
+                    for company, cost in result['costs'].items():
+                        # Clean text to avoid Telegram parsing issues
+                        company_clean = str(company).replace('*', '').replace('_', '').replace('`', '').replace('[', '').replace(']', '')
+                        cost_clean = str(cost).replace('*', '').replace('_', '').replace('`', '').replace('[', '').replace(']', '')
+                        route_text += f"• {company_clean}: {cost_clean}\n"
+                else:
+                    route_text += "❌ Не удалось получить стоимость"
                 
-        # Add remaining content
-        if current_message:
-            message_parts.append(current_message)
-            
-        # Send all message parts
-        for part in message_parts:
-            await update.message.reply_text(part, parse_mode=ParseMode.MARKDOWN)
+                route_text += "\n---\n"
+                
+                # Send each route as a separate message to avoid length limits
+                await update.message.reply_text(route_text)
+                
+            except Exception as e:
+                logger.error(f"Error sending route result: {e}")
+                # Send simple error message
+                error_text = f"❌ Ошибка отправки результата для маршрута {result['route_number']}: {result['origin']} → {result['destination']}"
+                await update.message.reply_text(error_text)
             
 
