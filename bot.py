@@ -21,7 +21,7 @@ class TelegramBot:
     def __init__(self, config: Config):
         """Initialize the bot with configuration."""
         self.config = config
-        self.application = Application.builder().token(config.telegram_token).build()
+        self.application = Application.builder().token(config.telegram_token or "").build()
         self.excel_processor = ExcelProcessor()
         self.topex_api = TopExAPI(config)
         

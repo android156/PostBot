@@ -21,7 +21,7 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-async def initialize_api(config: Config) -> TopExAPI:
+async def initialize_api(config: Config) -> TopExAPI | None:
     """Initialize and pre-authenticate TOP-EX API client."""
     try:
         api = TopExAPI(config)

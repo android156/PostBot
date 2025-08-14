@@ -59,7 +59,7 @@ class ExcelProcessor:
             
             # Extract and clean data
             routes = []
-            for index, row in df.iterrows():
+            for idx, (index, row) in enumerate(df.iterrows()):
                 try:
                     origin = self._clean_city_name(str(row[origin_col]))
                     destination = self._clean_city_name(str(row[destination_col]))
@@ -70,10 +70,10 @@ class ExcelProcessor:
                             'destination': destination
                         })
                     else:
-                        logger.warning(f"Skipping row {index + 2}: invalid data")
+                        logger.warning(f"Skipping row {idx + 2}: invalid data")
                         
                 except Exception as e:
-                    logger.warning(f"Error processing row {index + 2}: {e}")
+                    logger.warning(f"Error processing row {idx + 2}: {e}")
                     continue
                     
             if not routes:
