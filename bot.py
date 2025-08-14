@@ -4,6 +4,7 @@ Telegram bot implementation for processing Excel files with shipping routes.
 import logging
 import asyncio
 import os
+from datetime import datetime
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from telegram.constants import ParseMode
@@ -39,14 +40,14 @@ class TelegramBot:
         welcome_message = """
 🚚 **Добро пожаловать в бот расчета стоимости доставки!**
 
-Этот бот поможет вам рассчитать стоимость доставки посылок через различные компании.
+Этот бот поможет вам найти самые дешевые варианты доставки для разных весовых категорий.
 
 **Как использовать:**
 1. Отправьте Excel файл с маршрутами доставки
-2. Файл должен содержать колонки: город отправления, город получения, вес
-3. Бот обработает файл и вернет стоимость доставки от разных компаний
+2. Файл должен содержать колонки: "Откуда", "Куда" (без веса)
+3. Бот протестирует несколько весовых категорий и вернет Excel файл с самыми дешевыми предложениями
 
-**Поддерживаемые форматы:** .xlsx, .xls
+**Весовые категории:** 0.5кг, 1кг, 2кг, 5кг, 10кг
 
 Для получения справки используйте команду /help
         """
@@ -60,24 +61,22 @@ class TelegramBot:
 **Формат Excel файла:**
 Файл должен содержать следующие колонки:
 • Город отправления (или код КЛАДР)
-• Город получения (или код КЛАДР) 
-• Вес посылки (в граммах или килограммах)
+• Город получения (или код КЛАДР)
 
 **Примеры названий колонок:**
-• "Откуда", "Куда", "Вес"
-• "Отправитель", "Получатель", "Масса"
-• "From", "To", "Weight"
+• "Откуда", "Куда"
+• "Отправитель", "Получатель"
+• "From", "To"
+
+**Как работает бот:**
+1. Для каждого маршрута тестируются весовые категории: 0.5кг, 1кг, 2кг, 5кг, 10кг
+2. Находится самое дешевое предложение в каждой категории
+3. Результаты сохраняются в Excel файл с информацией о компании, цене и сроках
 
 **Требования к файлу:**
 • Максимальный размер: 10MB
 • Форматы: .xlsx, .xls
 • Первая строка должна содержать заголовки
-
-**Поддержка:**
-Если у вас возникли проблемы, проверьте:
-1. Правильность формата файла
-2. Наличие обязательных колонок
-3. Корректность данных о городах и весе
         """
         await update.message.reply_text(help_message, parse_mode=ParseMode.MARKDOWN)
         
@@ -140,101 +139,179 @@ class TelegramBot:
     async def handle_text(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle text messages."""
         await update.message.reply_text(
-            "📄 Пожалуйста, отправьте Excel файл с данными о доставке.\n"
+            "📄 Пожалуйста, отправьте Excel файл с маршрутами доставки (только колонки 'Откуда' и 'Куда').\n"
+            "Бот протестирует разные весовые категории и вернет Excel файл с результатами.\n"
             "Используйте /help для получения информации о формате файла."
         )
         
     async def get_shipping_costs(self, shipping_data):
-        """Get shipping costs for all routes."""
+        """Get shipping costs for all routes with multiple weight categories."""
         results = []
         
         for i, route in enumerate(shipping_data, 1):
             try:
-                # Add delay between requests to respect rate limits
-                if i > 1:
-                    await asyncio.sleep(self.config.rate_limit_delay)
-                    
-                # Get costs for this route
-                costs = await self.topex_api.calculate_shipping_cost(
-                    origin=route['origin'],
-                    destination=route['destination'],
-                    weight=route['weight']
-                )
-                
-                results.append({
+                route_result = {
                     'route_number': i,
                     'origin': route['origin'],
                     'destination': route['destination'],
-                    'weight': route['weight'],
-                    'costs': costs,
-                    'error': None
-                })
+                    'weight_results': {}
+                }
+                
+                # Test each weight category
+                for weight in self.config.weight_categories:
+                    try:
+                        # Add delay between requests to respect rate limits
+                        await asyncio.sleep(self.config.rate_limit_delay)
+                        
+                        logger.info(f"Testing route {i} ({route['origin']} → {route['destination']}) with weight {weight}g")
+                        
+                        # Get costs for this route and weight
+                        costs = await self.topex_api.calculate_shipping_cost(
+                            origin=route['origin'],
+                            destination=route['destination'],
+                            weight=weight
+                        )
+                        
+                        # Find cheapest offer
+                        cheapest_offer = self._find_cheapest_offer(costs)
+                        
+                        route_result['weight_results'][weight] = {
+                            'cheapest_offer': cheapest_offer,
+                            'all_offers': costs,
+                            'error': None
+                        }
+                        
+                    except Exception as e:
+                        logger.error(f"Error calculating cost for route {i}, weight {weight}g: {e}")
+                        route_result['weight_results'][weight] = {
+                            'cheapest_offer': None,
+                            'all_offers': None,
+                            'error': str(e)
+                        }
+                
+                results.append(route_result)
                 
             except Exception as e:
-                logger.error(f"Error calculating cost for route {i}: {e}")
+                logger.error(f"Error processing route {i}: {e}")
                 results.append({
                     'route_number': i,
                     'origin': route['origin'],
                     'destination': route['destination'],
-                    'weight': route['weight'],
-                    'costs': None,
+                    'weight_results': {},
                     'error': str(e)
                 })
                 
         return results
+    
+    def _find_cheapest_offer(self, costs):
+        """Find the cheapest offer from API response."""
+        if not costs or not isinstance(costs, dict):
+            return None
+            
+        cheapest = None
+        min_price = float('inf')
+        
+        for offer_name, offer_details in costs.items():
+            try:
+                # Extract price from offer details string
+                if '|' in str(offer_details):
+                    parts = str(offer_details).split('|')
+                    price_part = None
+                    for part in parts:
+                        if 'Цена:' in part:
+                            price_part = part
+                            break
+                    
+                    if price_part:
+                        # Extract numeric price
+                        import re
+                        price_match = re.search(r'(\d+\.?\d*)', price_part)
+                        if price_match:
+                            price = float(price_match.group(1))
+                            if price < min_price:
+                                min_price = price
+                                
+                                # Extract company, tariff, delivery days
+                                company_parts = offer_name.split(' - ')
+                                company = company_parts[0] if company_parts else offer_name
+                                tariff = company_parts[1] if len(company_parts) > 1 else ''
+                                
+                                # Extract delivery days from details
+                                delivery_days = ''
+                                for part in parts:
+                                    if 'Срок:' in part:
+                                        delivery_days = part.replace('Срок:', '').strip()
+                                        break
+                                
+                                cheapest = {
+                                    'company': company,
+                                    'tariff': tariff,
+                                    'price': price,
+                                    'delivery_days': delivery_days,
+                                    'full_offer': offer_name
+                                }
+            except Exception as e:
+                logger.error(f"Error parsing offer {offer_name}: {e}")
+                continue
+        
+        return cheapest
         
     async def send_results(self, update: Update, results):
-        """Send formatted results to user."""
+        """Generate and send Excel file with results."""
         if not results:
             await update.message.reply_text("❌ Нет данных для отображения")
             return
             
-        # Create summary message
-        total_routes = len(results)
-        successful_routes = len([r for r in results if r['error'] is None])
-        
-        summary = f"""📊 Результаты расчета стоимости доставки
+        try:
+            # Import the Excel generator
+            from excel_generator import ExcelGenerator
+            
+            # Create summary message
+            total_routes = len(results)
+            successful_routes = len([r for r in results if not r.get('error')])
+            
+            summary = f"""📊 Формирую Excel файл с результатами...
 
 📈 Обработано маршрутов: {total_routes}
 ✅ Успешно: {successful_routes}
 ❌ Ошибок: {total_routes - successful_routes}
 
----"""
-        
-        # Send summary first
-        await update.message.reply_text(summary)
-        
-        # Format and send results for each route
-        for result in results:
-            try:
-                route_text = f"""🚚 Маршрут {result['route_number']}
-📍 Откуда: {result['origin']}
-📍 Куда: {result['destination']}
-⚖️ Вес: {result['weight']} г
-
-"""
+Тестировались весовые категории: {', '.join([f'{w/1000:.1f}кг' for w in self.config.weight_categories])}"""
+            
+            # Send summary first
+            status_msg = await update.message.reply_text(summary)
+            
+            # Generate Excel file
+            excel_generator = ExcelGenerator()
+            import tempfile
+            import os
+            
+            # Create temporary file
+            temp_dir = tempfile.gettempdir()
+            timestamp = int(datetime.now().timestamp())
+            output_filename = f"shipping_results_{timestamp}.xlsx"
+            output_path = os.path.join(temp_dir, output_filename)
+            
+            # Generate the Excel file
+            excel_generator.generate_results_file(results, output_path)
+            
+            # Update status
+            await status_msg.edit_text("📤 Отправляю Excel файл...")
+            
+            # Send the Excel file
+            with open(output_path, 'rb') as file:
+                await update.message.reply_document(
+                    document=file,
+                    filename=f"Результаты_доставки_{timestamp}.xlsx",
+                    caption="📋 Готово! Excel файл с результатами расчета стоимости доставки"
+                )
+            
+            # Clean up temporary file
+            if os.path.exists(output_path):
+                os.unlink(output_path)
                 
-                if result['error']:
-                    route_text += f"❌ Ошибка: {result['error']}"
-                elif result['costs']:
-                    route_text += "💰 Стоимость доставки:\n"
-                    for company, cost in result['costs'].items():
-                        # Clean text to avoid Telegram parsing issues
-                        company_clean = str(company).replace('*', '').replace('_', '').replace('`', '').replace('[', '').replace(']', '')
-                        cost_clean = str(cost).replace('*', '').replace('_', '').replace('`', '').replace('[', '').replace(']', '')
-                        route_text += f"• {company_clean}: {cost_clean}\n"
-                else:
-                    route_text += "❌ Не удалось получить стоимость"
-                
-                route_text += "\n---\n"
-                
-                # Send each route as a separate message to avoid length limits
-                await update.message.reply_text(route_text)
-                
-            except Exception as e:
-                logger.error(f"Error sending route result: {e}")
-                # Send simple error message
-                error_text = f"❌ Ошибка отправки результата для маршрута {result['route_number']}: {result['origin']} → {result['destination']}"
-                await update.message.reply_text(error_text)
+        except Exception as e:
+            logger.error(f"Error generating Excel results: {e}")
+            await update.message.reply_text(f"❌ Ошибка при создании Excel файла: {str(e)}")
             
 

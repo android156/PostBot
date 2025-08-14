@@ -37,7 +37,7 @@ class ExcelProcessor:
             file_path: Path to the Excel file
             
         Returns:
-            List of dictionaries containing route data
+            List of dictionaries containing route data (without weight)
         """
         try:
             # Try to read Excel file
@@ -49,16 +49,13 @@ class ExcelProcessor:
             # Find relevant columns
             origin_col = self._find_column(df, self.origin_patterns)
             destination_col = self._find_column(df, self.destination_patterns)
-            weight_col = self._find_column(df, self.weight_patterns)
             
             if not origin_col:
                 raise ValueError("Не найдена колонка с городом отправления")
             if not destination_col:
                 raise ValueError("Не найдена колонка с городом получения")
-            if not weight_col:
-                raise ValueError("Не найдена колонка с весом")
                 
-            logger.info(f"Found columns - Origin: {origin_col}, Destination: {destination_col}, Weight: {weight_col}")
+            logger.info(f"Found columns - Origin: {origin_col}, Destination: {destination_col}")
             
             # Extract and clean data
             routes = []
@@ -66,19 +63,17 @@ class ExcelProcessor:
                 try:
                     origin = self._clean_city_name(str(row[origin_col]))
                     destination = self._clean_city_name(str(row[destination_col]))
-                    weight = self._parse_weight(str(row[weight_col]))
                     
-                    if origin and destination and weight > 0:
+                    if origin and destination:
                         routes.append({
                             'origin': origin,
-                            'destination': destination,
-                            'weight': weight
+                            'destination': destination
                         })
                     else:
-                        logger.warning(f"Skipping row {index + 1}: invalid data")
+                        logger.warning(f"Skipping row {index + 2}: invalid data")
                         
                 except Exception as e:
-                    logger.warning(f"Error processing row {index + 1}: {e}")
+                    logger.warning(f"Error processing row {index + 2}: {e}")
                     continue
                     
             if not routes:

@@ -31,4 +31,7 @@ class Config:
         self.request_timeout = 30
         self.rate_limit_delay = 1  # seconds between API calls
         
+        # Weight categories for testing (in grams)
+        self.weight_categories = [500, 1000, 2000, 5000, 10000]  # 0.5kg, 1kg, 2kg, 5kg, 10kg
+        
         logger.info("Configuration loaded successfully")

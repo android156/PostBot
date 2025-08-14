@@ -123,16 +123,21 @@ The architecture is designed to be scalable and maintainable, with clear separat
 - ✅ Multi-language support (Russian/English columns)
 - ✅ Rate limiting and request timeout management
 
+### August 14, 2025 - Major Architecture Overhaul
+- ✅ **BREAKING CHANGE**: Redesigned input format - Excel files now require only "Откуда" and "Куда" columns (no weight column)
+- ✅ **NEW FEATURE**: Multi-weight category testing - bot now tests 5 weight categories: 0.5kg, 1kg, 2kg, 5kg, 10kg
+- ✅ **NEW FEATURE**: Excel output generation - results are now returned as Excel files instead of text messages
+- ✅ **NEW MODULE**: ExcelGenerator class for creating formatted result files
+- ✅ **ENHANCED**: Cheapest offer detection algorithm for each weight category
+- ✅ **UPDATED**: Bot messages and help text to reflect new workflow
+- ✅ **IMPROVED**: Result data structure with weight-based categorization
+
 ### Current Status
-- Bot is operational and waiting for user interactions
-- All core functionality tested and working
-- API integration successfully authenticated using proper documentation
-- Excel processing handles the provided sample file format
-- **NEW**: Found correct API endpoint for cost calculation: `/cse/calc`
-- **NEW**: Integrated proper parameters for shipping cost calculation
-- **NEW**: Fixed Telegram message parsing errors that prevented results display
-- **NEW**: Implemented comprehensive JSON response parsing for all required fields
-- **NEW**: Added date formatting (timestamp to dd.mm.yy format)
-- **NEW**: Enhanced result formatting with detailed shipping information
-- System now properly displays real shipping costs from TOP-EX API with full details
-- Bot successfully processes and displays all company offers with tariffs, delivery methods, dates, and pricing
+- Bot is operational with completely new workflow
+- **INPUT**: Excel files with routes (only origin/destination, no weight required)
+- **PROCESSING**: Each route tested with 5 different weight categories automatically
+- **OUTPUT**: Excel file containing cheapest shipping options for each weight category
+- **API**: TOP-EX API integration working with `/cse/calc` endpoint
+- **FEATURES**: Real-time cost comparison, automatic cheapest offer selection, comprehensive Excel reporting
+- System now provides comprehensive shipping cost analysis across multiple weight categories
+- Bot successfully processes routes and generates detailed Excel reports with best pricing options
