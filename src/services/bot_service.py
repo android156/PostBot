@@ -636,14 +636,27 @@ class BotService(IBotService):
             with open(result_file_path, 'rb') as file:
                 await update.message.reply_document(
                     document=file,
+                    filename="shipping_results.xlsx",
                     caption=report_text,
                     parse_mode=ParseMode.MARKDOWN
                 )
             
             logger.info("Результаты успешно отправлены пользователю")
             
+            # Удаляем временный файл
+            try:
+                import os
+                os.unlink(result_file_path)
+                logger.debug(f"Удален временный файл: {result_file_path}")
+            except Exception as cleanup_error:
+                logger.warning(f"Не удалось удалить временный файл {result_file_path}: {cleanup_error}")
+            
         except Exception as e:
             logger.error(f"Ошибка отправки результатов: {e}")
+            try:
+                await update.message.reply_text("❌ Произошла ошибка при отправке результатов. Попробуйте еще раз.")
+            except:
+                pass
     
     # async def _send_error_message(self, update, error_message: str) -> None:
     #     """
