@@ -317,8 +317,26 @@ async def main():
         
         logger.info("Telegram бот запускается...")
         
-        # Запускаем бота
-        await application.run_polling()
+        # Инициализируем приложение
+        await application.initialize()
+        
+        # Запускаем updater
+        await application.start()
+        await application.updater.start_polling()
+        
+        logger.info("Telegram бот успешно запущен и работает...")
+        
+        # Ожидаем завершения работы
+        try:
+            # Держим приложение в работе
+            await asyncio.Event().wait()
+        except KeyboardInterrupt:
+            logger.info("Получен сигнал остановки...")
+        finally:
+            # Корректно останавливаем бота
+            await application.updater.stop()
+            await application.stop()
+            await application.shutdown()
             
     except KeyboardInterrupt:
         logger.info("Получен сигнал остановки от пользователя")
