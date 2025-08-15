@@ -184,15 +184,15 @@ class TopExApiClient(IApiClient):
 
             cities_url = f"{self._base_url}/cse/cityList"
             
-            # Согласно документации API - это POST запрос с токеном в теле
-            # Используем оригинальный токен без URL-кодирования
-            data = {'authToken': self._raw_auth_token}
-            headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+            # Пробуем отправить как JSON
+            json_data = {'authToken': self._raw_auth_token}
+            headers = {'Content-Type': 'application/json'}
 
-            logger.debug(f"Запрашиваю список городов: POST {cities_url}")
+            logger.debug(f"Запрашиваю список городов: POST {cities_url} (JSON format)")
+            logger.debug(f"Отправляю данные: authToken={self._raw_auth_token[:10]}...")
 
             async with self._session.post(cities_url, 
-                                         data=data, 
+                                         json=json_data, 
                                          headers=headers) as response:
                 if response.status == 200:
                     response_data = await response.json()
@@ -202,17 +202,53 @@ class TopExApiClient(IApiClient):
                         return cities
                     else:
                         error_msg = response_data.get('error', 'Неизвестная ошибка')
-                        logger.error(f"API вернул ошибку: {error_msg}")
-                        return []
+                        logger.warning(f"POST запрос не удался: {error_msg}")
+                        logger.info("Пробую GET запрос...")
+                        # Fallback: пробуем GET запрос
+                        return await self._try_get_cities_via_get()
                 else:
                     response_text = await response.text()
-                    logger.error(
-                        f"HTTP ошибка при получении городов: {response.status}, ответ: {response_text}"
+                    logger.warning(
+                        f"POST запрос вернул {response.status}, пробую GET запрос..."
                     )
-                    return []
+                    # Fallback: пробуем GET запрос
+                    return await self._try_get_cities_via_get()
 
         except Exception as e:
             logger.error(f"Ошибка получения списка городов: {e}")
+            return []
+
+    async def _try_get_cities_via_get(self) -> List[Dict[str, str]]:
+        """
+        Пробует получить список городов через GET запрос.
+        
+        Returns:
+            List[Dict[str, str]]: Список городов
+        """
+        try:
+            cities_url = f"{self._base_url}/cse/cityList"
+            params = {'authToken': self._auth_token}  # Используем URL-кодированный токен для GET
+            
+            logger.debug(f"Пробую GET запрос: {cities_url}")
+            
+            async with self._session.get(cities_url, params=params) as response:
+                if response.status == 200:
+                    response_data = await response.json()
+                    if response_data and response_data.get('status'):
+                        cities = response_data.get('data', [])
+                        logger.info(f"GET запрос успешен: получено {len(cities)} городов")
+                        return cities
+                    else:
+                        error_msg = response_data.get('error', 'Неизвестная ошибка')
+                        logger.error(f"GET запрос: API вернул ошибку: {error_msg}")
+                        return []
+                else:
+                    response_text = await response.text()
+                    logger.error(f"GET запрос: HTTP ошибка {response.status}, ответ: {response_text}")
+                    return []
+                    
+        except Exception as e:
+            logger.error(f"Ошибка GET запроса списка городов: {e}")
             return []
 
     async def is_authenticated(self) -> bool:
