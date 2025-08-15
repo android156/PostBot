@@ -182,23 +182,30 @@ class TopExApiClient(IApiClient):
             await self._ensure_session()
 
             cities_url = f"{self._base_url}/cse/cityList"
-            headers = {'Authorization': f'Bearer {self._auth_token}'}
+            
+            # Согласно документации API - это POST запрос с токеном в теле
+            data = {'authToken': self._auth_token}
+            headers = {'Content-Type': 'application/x-www-form-urlencoded'}
 
-            async with self._session.get(cities_url,
+            logger.debug(f"Запрашиваю список городов: POST {cities_url}")
+
+            async with self._session.post(cities_url, 
+                                         data=data, 
                                          headers=headers) as response:
                 if response.status == 200:
-                    data = await response.json()
-                    if data and data.get('status') and 'cities' in data:
-                        cities = data['cities']
+                    response_data = await response.json()
+                    if response_data and response_data.get('status'):
+                        cities = response_data.get('data', [])
                         logger.info(f"Получено {len(cities)} городов из API")
                         return cities
                     else:
-                        logger.error(
-                            "Неверный формат ответа при получении городов")
+                        error_msg = response_data.get('error', 'Неизвестная ошибка')
+                        logger.error(f"API вернул ошибку: {error_msg}")
                         return []
                 else:
+                    response_text = await response.text()
                     logger.error(
-                        f"HTTP ошибка при получении городов: {response.status}"
+                        f"HTTP ошибка при получении городов: {response.status}, ответ: {response_text}"
                     )
                     return []
 
