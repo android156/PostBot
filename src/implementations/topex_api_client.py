@@ -184,12 +184,16 @@ class TopExApiClient(IApiClient):
 
             cities_url = f"{self._base_url}/cse/cityList"
             
-            # Согласно документации API - это POST запрос с токеном в теле
+            # Согласно документации API - это POST запрос с токеном и обязательным country_id в теле
             # Используем оригинальный токен без URL-кодирования
-            data = {'authToken': self._raw_auth_token}
+            # Добавляем обязательный параметр country_id для России
+            data = {
+                'authToken': self._raw_auth_token,
+                'country_id': 'f2cd6487-4422-11dc-9497-0015170f8c09'  # Россия
+            }
             headers = {'Content-Type': 'application/x-www-form-urlencoded'}
 
-            logger.debug(f"Запрашиваю список городов: POST {cities_url}")
+            logger.debug(f"Запрашиваю список городов: POST {cities_url} с country_id для России")
 
             async with self._session.post(cities_url, 
                                          data=data, 
