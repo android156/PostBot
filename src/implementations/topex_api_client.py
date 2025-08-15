@@ -44,7 +44,8 @@ class TopExApiClient(IApiClient):
         self._session: Optional[aiohttp.ClientSession] = None
 
         # Настройки аутентификации
-        self._auth_token: Optional[str] = None
+        self._auth_token: Optional[str] = None  # URL-кодированный токен для GET параметров
+        self._raw_auth_token: Optional[str] = None  # Оригинальный токен для POST запросов
         self._token_expires_at: Optional[float] = None
         self._token_buffer = 300  # Обновляем токен за 5 минут до истечения
 
@@ -91,12 +92,12 @@ class TopExApiClient(IApiClient):
 
                     if data and data.get('status'):
                         # Сохраняем токен и время истечения
-                        self._auth_token = data.get('authToken')
+                        self._raw_auth_token = data.get('authToken')  # Оригинальный токен для POST запросов
                         expire_seconds = data.get('expire', 3600)
                         self._token_expires_at = time.time() + expire_seconds
 
-                        # URL-кодируем токен для безопасной передачи
-                        self._auth_token = urllib.parse.quote(self._auth_token,
+                        # URL-кодированный токен только для GET параметров
+                        self._auth_token = urllib.parse.quote(self._raw_auth_token,
                                                               safe='')
 
                         logger.info(
@@ -184,7 +185,8 @@ class TopExApiClient(IApiClient):
             cities_url = f"{self._base_url}/cse/cityList"
             
             # Согласно документации API - это POST запрос с токеном в теле
-            data = {'authToken': self._auth_token}
+            # Используем оригинальный токен без URL-кодирования
+            data = {'authToken': self._raw_auth_token}
             headers = {'Content-Type': 'application/x-www-form-urlencoded'}
 
             logger.debug(f"Запрашиваю список городов: POST {cities_url}")
@@ -220,7 +222,7 @@ class TopExApiClient(IApiClient):
         Returns:
             bool: True если есть валидный токен
         """
-        if not self._auth_token or not self._token_expires_at:
+        if not self._auth_token or not self._raw_auth_token or not self._token_expires_at:
             return False
 
         current_time = time.time()
