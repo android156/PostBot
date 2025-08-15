@@ -184,7 +184,8 @@ class TopExApiClient(IApiClient):
             params = {
                 'country_id': 'f2cd6487-4422-11dc-9497-0015170f8c09',  # Россия
                 'query': query,  # Название города или его часть
-                'pagination[pageSize]': 1000  # Максимальное количество результатов
+                'pagination[pageSize]': 1000,  # Максимальное количество результатов
+                'pagination[page]': 1  # Номер страницы (начинается с 1)
             }
 
             logger.debug(f"Запрашиваю список городов: GET {cities_url} с query='{query}'")
@@ -193,7 +194,11 @@ class TopExApiClient(IApiClient):
                 if response.status == 200:
                     response_data = await response.json()
                     if response_data and response_data.get('status'):
-                        cities = response_data.get('data', [])
+                        # API возвращает данные в формате {"id": "name"} в поле items
+                        items = response_data.get('items', {})
+                        # Преобразуем в список словарей для совместимости
+                        cities = [{"id": city_id, "name": city_name} 
+                                for city_id, city_name in items.items()]
                         logger.info(f"Получено {len(cities)} городов из API по запросу '{query}'")
                         return cities
                     else:
