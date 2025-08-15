@@ -180,20 +180,16 @@ class TopExApiClient(IApiClient):
 
             cities_url = f"{self._base_url}/cse/cityList"
             
-            # Согласно документации API - токен не нужен
-            # Требуются только country_id, query и pagination
-            data = {
+            # Согласно документации API - это GET запрос с параметрами в URL
+            params = {
                 'country_id': 'f2cd6487-4422-11dc-9497-0015170f8c09',  # Россия
                 'query': query,  # Название города или его часть
                 'pagination[pageSize]': 1000  # Максимальное количество результатов
             }
-            headers = {'Content-Type': 'application/x-www-form-urlencoded'}
 
-            logger.debug(f"Запрашиваю список городов: POST {cities_url} с query='{query}'")
+            logger.debug(f"Запрашиваю список городов: GET {cities_url} с query='{query}'")
 
-            async with self._session.post(cities_url, 
-                                         data=data, 
-                                         headers=headers) as response:
+            async with self._session.get(cities_url, params=params) as response:
                 if response.status == 200:
                     response_data = await response.json()
                     if response_data and response_data.get('status'):
