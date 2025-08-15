@@ -165,35 +165,31 @@ class TopExApiClient(IApiClient):
             logger.error(f"Ошибка расчета стоимости доставки: {e}")
             return self._create_error_result("Ошибка расчета", str(e))
 
-    async def get_available_cities(self) -> List[Dict[str, str]]:
+    async def get_available_cities(self, query: str = "") -> List[Dict[str, str]]:
         """
         Получает список доступных городов для доставки.
+        
+        Args:
+            query (str): Название города или его часть для поиска
         
         Returns:
             List[Dict[str, str]]: Список городов с кодами
         """
         try:
-            if not await self.is_authenticated():
-                if not await self.authenticate():
-                    logger.error(
-                        "Не удалось получить список городов: нет аутентификации"
-                    )
-                    return []
-
             await self._ensure_session()
 
             cities_url = f"{self._base_url}/cse/cityList"
             
-            # Согласно документации API - это POST запрос с токеном и обязательным country_id в теле
-            # Используем оригинальный токен без URL-кодирования
-            # Добавляем обязательный параметр country_id для России
+            # Согласно документации API - токен не нужен
+            # Требуются только country_id, query и pagination
             data = {
-                'authToken': self._raw_auth_token,
-                'country_id': 'f2cd6487-4422-11dc-9497-0015170f8c09'  # Россия
+                'country_id': 'f2cd6487-4422-11dc-9497-0015170f8c09',  # Россия
+                'query': query,  # Название города или его часть
+                'pagination[pageSize]': 1000  # Максимальное количество результатов
             }
             headers = {'Content-Type': 'application/x-www-form-urlencoded'}
 
-            logger.debug(f"Запрашиваю список городов: POST {cities_url} с country_id для России")
+            logger.debug(f"Запрашиваю список городов: POST {cities_url} с query='{query}'")
 
             async with self._session.post(cities_url, 
                                          data=data, 
@@ -202,7 +198,7 @@ class TopExApiClient(IApiClient):
                     response_data = await response.json()
                     if response_data and response_data.get('status'):
                         cities = response_data.get('data', [])
-                        logger.info(f"Получено {len(cities)} городов из API")
+                        logger.info(f"Получено {len(cities)} городов из API по запросу '{query}'")
                         return cities
                     else:
                         error_msg = response_data.get('error', 'Неизвестная ошибка')
@@ -258,7 +254,7 @@ class TopExApiClient(IApiClient):
         Преобразует название города или код в код города.
         
         Если передан код (числовая строка), возвращает его как есть.
-        Если передано название, ищет код через API TOP-EX с кешированием.
+        Если передано название, ищет код через API TOP-EX.
         
         Args:
             city_input (str): Название или код города
@@ -271,43 +267,58 @@ class TopExApiClient(IApiClient):
             logger.debug(f"Получен код города: {city_input}")
             return city_input
 
-        # Получаем список городов (с кешированием)
-        cities = await self._get_cached_cities()
-        if not cities:
+        # Нормализуем название для поиска
+        normalized_input = self._normalize_city_name(city_input)
+        logger.debug(f"Ищу город '{city_input}' (нормализовано: '{normalized_input}')")
+
+        # Сначала попробуем точный поиск
+        cities = await self._get_cached_cities(city_input)
+        if cities:
+            # Ищем точное совпадение
+            for city in cities:
+                city_name = city.get('name', '')
+                normalized_city = self._normalize_city_name(city_name)
+
+                if normalized_city == normalized_input:
+                    city_code = city.get('id') or city.get('code')
+                    logger.info(f"Найден точный код для города '{city_input}': {city_code}")
+                    return str(city_code)
+
+            # Если точного совпадения нет, берем первый результат
+            city = cities[0]
+            city_code = city.get('id') or city.get('code')
+            city_name = city.get('name', '')
+            logger.info(f"Найден код для города '{city_input}' -> '{city_name}': {city_code}")
+            return str(city_code)
+
+        # Если ничего не найдено через прямой поиск, попробуем общий кеш
+        logger.debug("Поиск в общем кеше городов")
+        all_cities = await self._get_cached_cities("")
+        if not all_cities:
             logger.error("Не удалось получить список городов для поиска")
             return None
 
-        # Нормализуем название для поиска
-        normalized_input = self._normalize_city_name(city_input)
-        logger.debug(
-            f"Ищу город '{city_input}' (нормализовано: '{normalized_input}')")
-
-        # Ищем точное совпадение по названию
-        for city in cities:
+        # Ищем точное совпадение в общем кеше
+        for city in all_cities:
             city_name = city.get('name', '')
             normalized_city = self._normalize_city_name(city_name)
 
             if normalized_city == normalized_input:
                 city_code = city.get('id') or city.get('code')
-                logger.info(
-                    f"Найден точный код для города '{city_input}': {city_code}"
-                )
+                logger.info(f"Найден точный код в кеше для города '{city_input}': {city_code}")
                 return str(city_code)
 
-        # Ищем частичное совпадение
-        for city in cities:
+        # Ищем частичное совпадение в общем кеше
+        for city in all_cities:
             city_name = city.get('name', '')
             normalized_city = self._normalize_city_name(city_name)
 
             if normalized_input in normalized_city or normalized_city in normalized_input:
                 city_code = city.get('id') or city.get('code')
-                logger.info(
-                    f"Найден частичный код для города '{city_input}' -> '{city_name}': {city_code}"
-                )
+                logger.info(f"Найден частичный код в кеше для города '{city_input}' -> '{city_name}': {city_code}")
                 return str(city_code)
 
-        logger.warning(
-            f"Код для города '{city_input}' не найден в базе TOP-EX")
+        logger.warning(f"Код для города '{city_input}' не найден в базе TOP-EX")
         return None
 
     async def _perform_calculation(self, origin_code: str,
@@ -418,42 +429,51 @@ class TopExApiClient(IApiClient):
         )
         return offers
 
-    async def _get_cached_cities(self) -> List[Dict[str, str]]:
+    async def _get_cached_cities(self, query: str = "") -> List[Dict[str, str]]:
         """
         Получает список городов с кешированием.
+        
+        Args:
+            query (str): Название города или его часть для поиска
         
         Returns:
             List[Dict[str, str]]: Список городов
         """
         current_time = time.time()
 
-        # Проверяем актуальность кеша
-        if (self._cities_cache is not None
-                and self._cities_cache_expires_at is not None
-                and current_time < self._cities_cache_expires_at):
-            logger.debug(
-                f"Использую кешированный список городов ({len(self._cities_cache)} городов)"
-            )
-            return self._cities_cache
-
-        # Обновляем кеш
-        logger.info("Обновляю кеш списка городов из API TOP-EX")
-        cities = await self.get_available_cities()
-
-        if cities:
-            self._cities_cache = cities
-            self._cities_cache_expires_at = current_time + self._cities_cache_ttl
-            logger.info(
-                f"Кеш городов обновлен: {len(cities)} городов, TTL: {self._cities_cache_ttl}с"
-            )
-        else:
-            logger.error("Не удалось обновить кеш городов")
-            # Возвращаем старый кеш если он есть
-            if self._cities_cache is not None:
-                logger.info("Использую устаревший кеш городов")
+        # Если запрос пустой, используем общий кеш
+        if not query:
+            # Проверяем актуальность общего кеша
+            if (self._cities_cache is not None
+                    and self._cities_cache_expires_at is not None
+                    and current_time < self._cities_cache_expires_at):
+                logger.debug(
+                    f"Использую кешированный список городов ({len(self._cities_cache)} городов)"
+                )
                 return self._cities_cache
 
-        return cities or []
+            # Обновляем общий кеш
+            logger.info("Обновляю общий кеш списка городов из API TOP-EX")
+            cities = await self.get_available_cities("")
+
+            if cities:
+                self._cities_cache = cities
+                self._cities_cache_expires_at = current_time + self._cities_cache_ttl
+                logger.info(
+                    f"Общий кеш городов обновлен: {len(cities)} городов, TTL: {self._cities_cache_ttl}с"
+                )
+            else:
+                logger.error("Не удалось обновить общий кеш городов")
+                # Возвращаем старый кеш если он есть
+                if self._cities_cache is not None:
+                    logger.info("Использую устаревший общий кеш городов")
+                    return self._cities_cache
+
+            return cities or []
+        else:
+            # Для конкретных запросов не кешируем, делаем прямой запрос
+            logger.info(f"Выполняю поиск городов по запросу: '{query}'")
+            return await self.get_available_cities(query)
 
     def _normalize_city_name(self, city_name: str) -> str:
         """
