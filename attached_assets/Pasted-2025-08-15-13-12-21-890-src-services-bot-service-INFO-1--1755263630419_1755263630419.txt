@@ -1,0 +1,21 @@
+2025-08-15 13:12:21,890 - src.services.bot_service - INFO - Начинаю расчет стоимости для 1 маршрутов
+2025-08-15 13:12:21,890 - src.services.bot_service - INFO - Весовые категории: [0.5, 3.0]
+2025-08-15 13:12:21,890 - src.implementations.topex_api_client - INFO - Обновляю кеш списка городов из API TOP-EX
+2025-08-15 13:12:22,547 - src.implementations.topex_api_client - ERROR - API вернул ошибку: Неверные параметры.
+2025-08-15 13:12:22,547 - src.implementations.topex_api_client - ERROR - Не удалось обновить кеш городов
+2025-08-15 13:12:22,548 - src.implementations.topex_api_client - ERROR - Не удалось получить список городов для поиска
+2025-08-15 13:12:22,548 - src.implementations.topex_api_client - INFO - Обновляю кеш списка городов из API TOP-EX
+2025-08-15 13:12:22,747 - src.implementations.topex_api_client - ERROR - API вернул ошибку: Неверные параметры.
+2025-08-15 13:12:22,747 - src.implementations.topex_api_client - ERROR - Не удалось обновить кеш городов
+2025-08-15 13:12:22,747 - src.implementations.topex_api_client - ERROR - Не удалось получить список городов для поиска
+2025-08-15 13:12:22,747 - src.services.bot_service - INFO - Прогресс расчета: 50.0% (1/2)
+2025-08-15 13:12:22,747 - src.implementations.topex_api_client - INFO - Обновляю кеш списка городов из API TOP-EX
+2025-08-15 13:12:22,948 - src.implementations.topex_api_client - ERROR - API вернул ошибку: Неверные параметры.
+2025-08-15 13:12:22,948 - src.implementations.topex_api_client - ERROR - Не удалось обновить кеш городов
+2025-08-15 13:12:22,948 - src.implementations.topex_api_client - ERROR - Не удалось получить список городов для поиска
+2025-08-15 13:12:22,949 - src.implementations.topex_api_client - INFO - Обновляю кеш списка городов из API TOP-EX
+2025-08-15 13:12:23,148 - src.implementations.topex_api_client - ERROR - API вернул ошибку: Неверные параметры.
+2025-08-15 13:12:23,148 - src.implementations.topex_api_client - ERROR - Не удалось обновить кеш городов
+2025-08-15 13:12:23,148 - src.implementations.topex_api_client - ERROR - Не удалось получить список городов для поиска
+2025-08-15 13:12:23,149 - src.services.bot_service - INFO - Прогресс расчета: 100.0% (2/2)
+2025-08-15 13:12:23,149 - src.services.bot_service - INFO - Расчет завершен: 1 маршрутов обработано
