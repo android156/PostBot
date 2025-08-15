@@ -33,6 +33,9 @@ from src.implementations.result_generator import ExcelResultGenerator
 # Импорт сервиса
 from src.services.bot_service import BotService
 
+# Импорты Telegram Bot
+from telegram.ext import Application, CommandHandler, MessageHandler, filters
+
 
 class ApplicationContainer:
     """
@@ -296,11 +299,26 @@ async def main():
         logger.info("Приложение успешно запущено и готово к работе")
         logger.info("Для остановки нажмите Ctrl+C")
         
-        # Основной цикл работы приложения
-        # В реальной реализации здесь будет запуск Telegram бота
-        # Пока что просто ждем бесконечно
-        while True:
-            await asyncio.sleep(1)
+        # Получаем токен Telegram из конфигурации
+        telegram_token = config.get_telegram_token()
+        
+        # Создаем Telegram Application
+        application = Application.builder().token(telegram_token).build()
+        
+        # Регистрируем обработчики команд
+        application.add_handler(CommandHandler("start", bot_service.handle_start_command))
+        application.add_handler(CommandHandler("help", bot_service.handle_help_command))
+        
+        # Регистрируем обработчик документов
+        application.add_handler(MessageHandler(filters.Document.ALL, bot_service.handle_document))
+        
+        # Регистрируем обработчик текстовых сообщений
+        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, bot_service.handle_text_message))
+        
+        logger.info("Telegram бот запускается...")
+        
+        # Запускаем бота
+        await application.run_polling()
             
     except KeyboardInterrupt:
         logger.info("Получен сигнал остановки от пользователя")

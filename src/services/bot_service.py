@@ -15,10 +15,9 @@ import asyncio
 from typing import Dict, Any, List
 from datetime import datetime
 
-# Временно закомментируем импорты telegram до исправления
-# from telegram import Update
-# from telegram.ext import ContextTypes
-# from telegram.constants import ParseMode
+from telegram import Update
+from telegram.ext import ContextTypes
+from telegram.constants import ParseMode
 
 from ..interfaces.i_bot_service import IBotService
 from ..interfaces.i_excel_processor import IExcelProcessor
@@ -98,8 +97,7 @@ class BotService(IBotService):
             
             welcome_message = self._create_welcome_message()
             
-            # Временно закомментируем до исправления импортов
-            # await update.message.reply_text(welcome_message, parse_mode=ParseMode.MARKDOWN)
+            await update.message.reply_text(welcome_message, parse_mode=ParseMode.MARKDOWN)
             
             logger.info(f"Отправлено приветственное сообщение пользователю {user_id}")
             
@@ -123,8 +121,7 @@ class BotService(IBotService):
             
             help_message = self._create_help_message()
             
-            # Временно закомментируем до исправления импортов
-            # await update.message.reply_text(help_message, parse_mode=ParseMode.MARKDOWN)
+            await update.message.reply_text(help_message, parse_mode=ParseMode.MARKDOWN)
             
         except Exception as e:
             logger.error(f"Ошибка обработки команды /help: {e}")
@@ -160,17 +157,17 @@ class BotService(IBotService):
                 return
             
             # Шаг 2: Уведомление о начале обработки
-            # processing_msg = await update.message.reply_text("📊 Обрабатываю файл...")
+            processing_msg = await update.message.reply_text("📊 Обрабатываю файл...")
             
             # Шаг 3: Скачивание и обработка файла
             routes_data = await self._download_and_process_file(document, context)
             if not routes_data:
-                # await processing_msg.edit_text("❌ Не удалось извлечь данные из файла")
+                await processing_msg.edit_text("❌ Не удалось извлечь данные из файла")
                 return
                 
-            # await processing_msg.edit_text(
-            #     f"📋 Найдено {len(routes_data)} маршрутов. Рассчитываю стоимость доставки..."
-            # )
+            await processing_msg.edit_text(
+                f"📋 Найдено {len(routes_data)} маршрутов. Рассчитываю стоимость доставки..."
+            )
             
             # Шаг 4: Расчет стоимости доставки
             calculation_results = await self.process_shipping_calculation(routes_data)
@@ -212,7 +209,7 @@ class BotService(IBotService):
             # Анализируем сообщение и отвечаем соответствующе
             response = self._analyze_text_message(message_text)
             
-            # await update.message.reply_text(response)
+            await update.message.reply_text(response)
             
         except Exception as e:
             logger.error(f"Ошибка обработки текстового сообщения: {e}")
@@ -494,11 +491,11 @@ class BotService(IBotService):
         """
         try:
             # Скачиваем файл
-            # file = await context.bot.get_file(document.file_id)
+            file = await context.bot.get_file(document.file_id)
             
             # Создаем временный файл
             with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmp_file:
-                # await file.download_to_drive(tmp_file.name)
+                await file.download_to_drive(tmp_file.name)
                 temp_file_path = tmp_file.name
             
             try:
@@ -635,13 +632,13 @@ class BotService(IBotService):
 📋 Подробные результаты во вложенном Excel файле.
             """.strip()
             
-            # Отправляем файл (временно закомментировано)
-            # with open(result_file_path, 'rb') as file:
-            #     await update.message.reply_document(
-            #         document=file,
-            #         caption=report_text,
-            #         parse_mode=ParseMode.MARKDOWN
-            #     )
+            # Отправляем файл
+            with open(result_file_path, 'rb') as file:
+                await update.message.reply_document(
+                    document=file,
+                    caption=report_text,
+                    parse_mode=ParseMode.MARKDOWN
+                )
             
             logger.info("Результаты успешно отправлены пользователю")
             
