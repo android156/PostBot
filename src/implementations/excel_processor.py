@@ -52,7 +52,6 @@ class ExcelProcessor(IExcelProcessor):
         
         # Настройки для pandas (принцип конфигурации)
         self._pandas_options = {
-            'engine': 'openpyxl',  # Для .xlsx файлов
             'header': 0,  # Первая строка - заголовки
             'na_values': ['', ' ', 'N/A', 'NA', 'null', 'NULL'],  # Пустые значения
             'keep_default_na': True
@@ -158,12 +157,17 @@ class ExcelProcessor(IExcelProcessor):
         file_extension = Path(file_path).suffix.lower()
         
         try:
+            # Создаем копию опций для избежания конфликта с engine
+            pandas_options = self._pandas_options.copy()
+            
             if file_extension == '.xlsx':
                 # Для .xlsx файлов используем openpyxl
-                df = pd.read_excel(file_path, engine='openpyxl', **self._pandas_options)
+                pandas_options['engine'] = 'openpyxl'
             else:
                 # Для .xls файлов используем xlrd
-                df = pd.read_excel(file_path, engine='xlrd', **self._pandas_options)
+                pandas_options['engine'] = 'xlrd'
+            
+            df = pd.read_excel(file_path, **pandas_options)
                 
             # Удаляем полностью пустые строки
             df = df.dropna(how='all')
