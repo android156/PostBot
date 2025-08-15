@@ -7,6 +7,8 @@ This is a Telegram bot application that processes Excel files containing shippin
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.
+Code requirements: All code must have detailed Russian comments and follow SOLID/DRY principles.
+Documentation: README.md must contain comprehensive description of all modules, variables, and functions.
 
 ## System Architecture
 
@@ -141,14 +143,42 @@ The architecture is designed to be scalable and maintainable, with clear separat
 - 🛠️ **TECHNICAL FIX**: Systematically added all required Telegram Bot API class imports (60+ classes)
 - 🛠️ **TECHNICAL FIX**: Fixed import chains for games, inline, files, and core telegram modules
 
+### August 15, 2025 - Complete Architecture Redesign with SOLID Principles
+- ✅ **ARCHITECTURE OVERHAUL**: Полная реструктуризация согласно принципам SOLID и DRY
+- ✅ **CLEAN ARCHITECTURE**: Внедрена чистая архитектура с разделением на слои
+- ✅ **DEPENDENCY INJECTION**: Создан ApplicationContainer для управления зависимостями
+- ✅ **INTERFACES**: Все компоненты работают через абстрактные интерфейсы
+- ✅ **MODULAR DESIGN**: Четкое разделение на interfaces, implementations, models, services
+- ✅ **COMPREHENSIVE DOCS**: Создан детальный README.md с описанием всех модулей
+- ✅ **RUSSIAN COMMENTS**: Все новые компоненты снабжены подробными комментариями на русском языке
+- ✅ **TELEGRAM IMPORTS**: Восстановлены все необходимые импорты telegram библиотеки
+- ✅ **TESTING**: Базовые компоненты протестированы и работают корректно
+
 ### Current Status
-- ✅ **OPERATIONAL**: Bot is fully functional and running successfully
-- ✅ **STABLE**: All critical imports resolved, no runtime errors
-- ✅ **TESTED**: Bot authentication working with Telegram API
-- **INPUT**: Excel files with routes (only origin/destination, no weight required)
-- **PROCESSING**: Each route tested with 5 different weight categories automatically
-- **OUTPUT**: Excel file containing cheapest shipping options for each weight category
-- **API**: TOP-EX API integration working with `/cse/calc` endpoint
-- **FEATURES**: Real-time cost comparison, automatic cheapest offer selection, comprehensive Excel reporting
-- System provides comprehensive shipping cost analysis across multiple weight categories
-- Bot successfully processes routes and generates detailed Excel reports with best pricing options
+- ✅ **NEW ARCHITECTURE**: Новая модульная архитектура полностью готова
+- ✅ **SOLID PRINCIPLES**: Single Responsibility, Open/Closed, Liskov Substitution, Interface Segregation, Dependency Inversion
+- ✅ **DRY IMPLEMENTATION**: Устранение дублирования кода через централизованную конфигурацию
+- ✅ **LEGACY COMPATIBILITY**: Старая версия сохранена для обратной совместимости
+- **NEW ENTRY POINT**: src/main.py - новая точка входа с DI контейнером
+- **CONFIGURATION**: Полностью настраиваемая система через переменные окружения
+- **DOCUMENTATION**: Исчерпывающая документация всех модулей, функций и переменных
+- **TESTING**: Система тестирования архитектуры и компонентов
+
+### Новая структура проекта:
+```
+src/
+├── interfaces/          # Абстракции (Принцип DIP)
+├── implementations/     # Конкретные реализации
+├── models/             # Модели данных
+├── services/           # Бизнес-логика
+└── main.py            # Точка входа с DI контейнером
+```
+
+### Основные преимущества новой архитектуры:
+- **Тестируемость**: Каждый компонент может тестироваться независимо
+- **Расширяемость**: Легко добавлять новые API провайдеры, форматы файлов
+- **Поддерживаемость**: Четкое разделение ответственности
+- **Конфигурируемость**: Все настройки через переменные окружения
+- **Документированность**: Подробные комментарии и README.md
+
+Система готова к production использованию и дальнейшему развитию
