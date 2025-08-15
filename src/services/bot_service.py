@@ -143,10 +143,14 @@ class BotService(IBotService):
             update: Объект обновления от Telegram с документом
             context: Контекст бота
         """
-        document = update.message.document
+        document = update.message.document if update.message else None
         user_id = update.effective_user.id if update.effective_user else "unknown"
         
-        logger.info(f"Пользователь {user_id} загрузил файл: {document.file_name}")
+        if not document:
+            logger.error("Нет документа в сообщении")
+            return
+            
+        logger.info(f"Пользователь {user_id} загрузил файл: {document.file_name if document.file_name else 'без имени'}")
         
         try:
             # Шаг 1: Валидация файла
@@ -197,8 +201,12 @@ class BotService(IBotService):
         """
         try:
             user_id = update.effective_user.id if update.effective_user else "unknown"
-            message_text = update.message.text
+            message_text = update.message.text if update.message else None
             
+            if not message_text:
+                logger.error("Нет текста в сообщении")
+                return
+                
             logger.info(f"Получено текстовое сообщение от пользователя {user_id}: {message_text}")
             
             # Анализируем сообщение и отвечаем соответствующе
@@ -251,7 +259,7 @@ class BotService(IBotService):
                 # Рассчитываем для каждой весовой категории
                 for weight in self._weight_categories:
                     try:
-                        logger.debug(f"Расчет для {route.get_display_name()}, вес {weight}г")
+                        logger.debug(f"Расчет для {route.get_display_name()}, вес {weight}кг")
                         
                         # Вызываем API для расчета
                         api_result = await self._api_client.calculate_shipping_cost(
@@ -271,7 +279,7 @@ class BotService(IBotService):
                             logger.info(f"Прогресс расчета: {progress:.1f}% ({completed_calculations}/{total_calculations})")
                         
                     except Exception as e:
-                        logger.error(f"Ошибка расчета для {route.get_display_name()}, вес {weight}г: {e}")
+                        logger.error(f"Ошибка расчета для {route.get_display_name()}, вес {weight}кг: {e}")
                         # Создаем результат с ошибкой
                         error_result = WeightCategoryResult(weight=weight, calculation_error=str(e))
                         route_result.add_weight_result(error_result)
@@ -354,7 +362,7 @@ class BotService(IBotService):
         Returns:
             str: Отформатированное приветственное сообщение
         """
-        weight_categories = [f"{w/1000:.1f}кг" for w in self._weight_categories]
+        weight_categories = [f"{w:.1f}кг" for w in self._weight_categories]
         weights_text = ", ".join(weight_categories)
         
         return f"""

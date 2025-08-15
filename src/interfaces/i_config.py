@@ -92,3 +92,13 @@ class IConfig(ABC):
                 - 'max_file_size': максимальный размер файла логов
         """
         pass
+
+    @abstractmethod
+    def get_weight_categories(self) -> list[float]:
+        """
+        Возвращает список весовых категорий для тестирования.
+        
+        Returns:
+            list[float]: Список весов в килограммах
+        """
+        pass

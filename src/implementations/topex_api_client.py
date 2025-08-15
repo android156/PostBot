@@ -88,7 +88,7 @@ class TopExApiClient(IApiClient):
                 if response.status == 200:
                     data = await response.json()
                     
-                    if data.get('status'):
+                    if data and data.get('status'):
                         # Сохраняем токен и время истечения
                         self._auth_token = data.get('authToken')
                         expire_seconds = data.get('expire', 3600)
@@ -115,7 +115,7 @@ class TopExApiClient(IApiClient):
         self, 
         origin: str, 
         destination: str, 
-        weight: int
+        weight: float
     ) -> Dict[str, Any]:
         """
         Рассчитывает стоимость доставки для заданного маршрута.
@@ -123,7 +123,7 @@ class TopExApiClient(IApiClient):
         Args:
             origin (str): Код или название города отправления
             destination (str): Код или название города назначения
-            weight (int): Вес груза в граммах
+            weight (float): Вес груза в килокилограммах
             
         Returns:
             Dict[str, Any]: Результат расчета с предложениями
@@ -183,7 +183,7 @@ class TopExApiClient(IApiClient):
             async with self._session.get(cities_url, headers=headers) as response:
                 if response.status == 200:
                     data = await response.json()
-                    if data.get('status') and 'cities' in data:
+                    if data and data.get('status') and 'cities' in data:
                         cities = data['cities']
                         logger.info(f"Получено {len(cities)} городов из API")
                         return cities
@@ -260,7 +260,7 @@ class TopExApiClient(IApiClient):
         self, 
         origin_code: str, 
         destination_code: str, 
-        weight: int
+        weight: float
     ) -> Dict[str, Any]:
         """
         Выполняет фактический расчет стоимости доставки.
@@ -268,7 +268,7 @@ class TopExApiClient(IApiClient):
         Args:
             origin_code (str): Код города отправления
             destination_code (str): Код города назначения
-            weight (int): Вес в граммах
+            weight (float): Вес в килокилограммах
             
         Returns:
             Dict[str, Any]: Результат расчета
@@ -284,13 +284,13 @@ class TopExApiClient(IApiClient):
                 'weight': weight
             }
             
-            logger.debug(f"Выполняю расчет: {origin_code} -> {destination_code}, {weight}г")
+            logger.debug(f"Выполняю расчет: {origin_code} -> {destination_code}, {weight}кг")
             
             async with self._session.get(calc_url, params=params) as response:
                 if response.status == 200:
                     data = await response.json()
                     
-                    if data.get('status'):
+                    if data and data.get('status'):
                         # Обрабатываем успешный ответ с предложениями
                         offers = self._parse_shipping_offers(data.get('data', []), weight)
                         
@@ -316,7 +316,7 @@ class TopExApiClient(IApiClient):
             logger.error(f"Ошибка выполнения расчета: {e}")
             return self._create_error_result("Исключение", str(e))
     
-    def _parse_shipping_offers(self, api_data: List[Dict], weight: int) -> List[ShippingOffer]:
+    def _parse_shipping_offers(self, api_data: List[Dict], weight: float) -> List[ShippingOffer]:
         """
         Парсит данные API в объекты ShippingOffer.
         
@@ -336,7 +336,7 @@ class TopExApiClient(IApiClient):
                     price=float(item.get('price', 0)),
                     delivery_days=int(item.get('deliveryTime', 0)),
                     tariff_name=item.get('tariffName', 'Стандартный тариф'),
-                    weight=weight,
+                    weight=int(weight * 1000),  # Конвертируем кг в граммы для модели
                     additional_info={
                         'tariff_id': item.get('tariffId'),
                         'company_id': item.get('deliveryCompanyId'),

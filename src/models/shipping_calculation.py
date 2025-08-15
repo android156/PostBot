@@ -27,7 +27,7 @@ class ShippingOffer:
         price (float): Стоимость доставки в рублях
         delivery_days (int): Срок доставки в днях
         tariff_name (str): Название тарифа компании
-        weight (int): Вес груза в граммах для этого предложения
+        weight (int): Вес груза в килокилограммах для этого предложения
         additional_info (Dict[str, Any]): Дополнительная информация
     """
     company_name: str
@@ -57,7 +57,7 @@ class ShippingOffer:
         Returns:
             float: Стоимость за кг в рублях
         """
-        weight_kg = self.weight / 1000
+        weight_kg = self.weight
         return self.price / weight_kg if weight_kg > 0 else 0
     
     def is_better_than(self, other: 'ShippingOffer') -> bool:
@@ -95,7 +95,7 @@ class ShippingOffer:
             'delivery_days': self.delivery_days,
             'tariff_name': self.tariff_name,
             'weight': self.weight,
-            'weight_kg': self.weight / 1000,
+            'weight_kg': self.weight,
             'price_per_kg': self.get_price_per_kg(),
             'additional_info': self.additional_info
         }
@@ -110,7 +110,7 @@ class WeightCategoryResult:
     и информацию о самом выгодном предложении.
     
     Attributes:
-        weight (int): Вес в граммах
+        weight (int): Вес в килокилограммах
         offers (List[ShippingOffer]): Все предложения для этого веса
         cheapest_offer (Optional[ShippingOffer]): Самое дешевое предложение
         calculation_error (Optional[str]): Ошибка расчета (если была)
@@ -154,12 +154,12 @@ class WeightCategoryResult:
     
     def get_weight_kg(self) -> float:
         """
-        Возвращает вес в килограммах.
+        Возвращает вес в килокилограммах.
         
         Returns:
             float: Вес в кг
         """
-        return self.weight / 1000
+        return self.weight
     
     def to_dict(self) -> Dict[str, Any]:
         """
@@ -232,7 +232,7 @@ class RouteCalculationResult:
         Находит весовую категорию с самым выгодным предложением.
         
         Returns:
-            Optional[int]: Вес в граммах с лучшим соотношением цена/кг
+            Optional[int]: Вес в килокилограммах с лучшим соотношением цена/кг
         """
         if not self.weight_results:
             return None

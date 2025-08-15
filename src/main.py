@@ -284,7 +284,7 @@ async def main():
                 logger.info(f"  {key}: {value}")
         
         weight_categories = config.get_weight_categories()
-        weight_kg = [f"{w/1000:.1f}кг" for w in weight_categories]
+        weight_kg = [f"{w:.1f}кг" for w in weight_categories]
         logger.info(f"  Весовые категории: {', '.join(weight_kg)}")
         
         # Получаем сервис бота

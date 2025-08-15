@@ -47,7 +47,9 @@ class ConfigManager(IConfig):
             'log_level': 'INFO',
             'log_file': 'bot.log',
             'max_log_file_size': 50 * 1024 * 1024,  # 50 MB
-            'topex_api_base': 'https://api.top-ex.ru'
+            'topex_api_base': 'https://api.top-ex.ru',
+            # Весовые категории по умолчанию в килограммах
+            'weight_categories': [0.5, 1.0, 2.0, 5.0, 10.0]
         }
         
         # Загружаем настройки
@@ -201,7 +203,7 @@ class ConfigManager(IConfig):
             ))
         }
     
-    def get_weight_categories(self) -> list[int]:
+    def get_weight_categories(self) -> list[float]:
         """
         Возвращает список весовых категорий для тестирования.
         
@@ -209,16 +211,16 @@ class ConfigManager(IConfig):
         используемых при расчете стоимости доставки.
         
         Returns:
-            list[int]: Список весов в граммах
+            list[float]: Список весов в килограммах
         """
-        # Веса по умолчанию (можно настроить через переменную окружения)
-        default_weights = [500, 1000, 2000, 5000, 10000]  # в граммах
+        # Веса по умолчанию в кг (можно настроить через переменную окружения)
+        default_weights = self._default_settings['weight_categories']
         
         weight_categories_str = os.getenv('WEIGHT_CATEGORIES', '')
         if weight_categories_str:
             try:
-                # Парсим веса из строки вида "500,1000,2000,5000,10000"
-                weights = [int(w.strip()) for w in weight_categories_str.split(',')]
+                # Парсим веса из строки вида "0.5,1.0,2.0,5.0,10.0"
+                weights = [float(w.strip()) for w in weight_categories_str.split(',')]
                 logger.info(f"Используются настраиваемые весовые категории: {weights}")
                 return weights
             except ValueError as e:
