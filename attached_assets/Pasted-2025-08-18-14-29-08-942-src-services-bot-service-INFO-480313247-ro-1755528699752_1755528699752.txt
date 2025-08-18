@@ -1,0 +1,35 @@
+2025-08-18 14:29:08,942 - src.services.bot_service - INFO - Пользователь 480313247 загрузил файл: routs0.xlsx
+2025-08-18 14:29:09,342 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7982747371:AAGtC6hjyKMQY_I51BhxkdHBW9tbzmH1Zy4/sendMessage "HTTP/1.1 200 OK"
+2025-08-18 14:29:09,473 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7982747371:AAGtC6hjyKMQY_I51BhxkdHBW9tbzmH1Zy4/getFile "HTTP/1.1 200 OK"
+2025-08-18 14:29:09,583 - httpx - INFO - HTTP Request: GET https://api.telegram.org/file/bot7982747371%3AAAGtC6hjyKMQY_I51BhxkdHBW9tbzmH1Zy4/documents/file_29.xlsx "HTTP/1.1 200 OK"
+2025-08-18 14:29:09,585 - src.implementations.excel_processor - INFO - Начинаю обработку файла: /tmp/tmpor9zu4f_.xlsx
+2025-08-18 14:29:09,973 - src.implementations.excel_processor - INFO - Файл прочитан. Строк: 1, Колонок: 2
+2025-08-18 14:29:09,973 - src.implementations.excel_processor - INFO - Найдены колонки: 'пункт отправления' и 'пункт назначения'
+2025-08-18 14:29:09,973 - src.implementations.excel_processor - INFO - Успешно обработано 1 маршрутов из файла
+2025-08-18 14:29:09,973 - src.services.bot_service - INFO - Извлечено 1 маршрутов из файла
+2025-08-18 14:29:10,110 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7982747371:AAGtC6hjyKMQY_I51BhxkdHBW9tbzmH1Zy4/editMessageText "HTTP/1.1 200 OK"
+2025-08-18 14:29:10,111 - src.services.bot_service - INFO - Начинаю расчет стоимости для 1 маршрутов
+2025-08-18 14:29:10,111 - src.services.bot_service - INFO - Весовые категории: [0.5, 3.0]
+2025-08-18 14:29:10,111 - src.implementations.topex_api_client - INFO - Выполняю поиск городов по запросу: 'Москва'
+2025-08-18 14:29:10,653 - src.implementations.topex_api_client - INFO - Получено 6 городов из API по запросу 'Москва'
+2025-08-18 14:29:10,653 - src.implementations.topex_api_client - INFO - Найден код для города 'Москва' -> 'Москва г': cf862f56-442d-11dc-9497-0015170f8c09
+2025-08-18 14:29:10,653 - src.implementations.topex_api_client - INFO - Выполняю поиск городов по запросу: 'Санкт-Петербург'
+2025-08-18 14:29:10,851 - src.implementations.topex_api_client - INFO - Получено 1 городов из API по запросу 'Санкт-Петербург'
+2025-08-18 14:29:10,851 - src.implementations.topex_api_client - INFO - Найден код для города 'Санкт-Петербург' -> 'Санкт-Петербург г': cf862f77-442d-11dc-9497-0015170f8c09
+2025-08-18 14:29:12,111 - src.services.bot_service - INFO - Прогресс расчета: 50.0% (1/2)
+2025-08-18 14:29:12,112 - src.implementations.topex_api_client - INFO - Выполняю поиск городов по запросу: 'Москва'
+2025-08-18 14:29:12,276 - src.implementations.topex_api_client - INFO - Получено 6 городов из API по запросу 'Москва'
+2025-08-18 14:29:12,277 - src.implementations.topex_api_client - INFO - Найден код для города 'Москва' -> 'Москва г': cf862f56-442d-11dc-9497-0015170f8c09
+2025-08-18 14:29:12,277 - src.implementations.topex_api_client - INFO - Выполняю поиск городов по запросу: 'Санкт-Петербург'
+2025-08-18 14:29:12,486 - src.implementations.topex_api_client - INFO - Получено 1 городов из API по запросу 'Санкт-Петербург'
+2025-08-18 14:29:12,486 - src.implementations.topex_api_client - INFO - Найден код для города 'Санкт-Петербург' -> 'Санкт-Петербург г': cf862f77-442d-11dc-9497-0015170f8c09
+2025-08-18 14:29:13,722 - src.services.bot_service - INFO - Прогресс расчета: 100.0% (2/2)
+2025-08-18 14:29:13,723 - src.services.bot_service - INFO - Расчет завершен: 1 маршрутов обработано
+2025-08-18 14:29:13,723 - src.implementations.result_generator - INFO - Генерирую файл результатов в формате xlsx
+2025-08-18 14:29:13,723 - src.implementations.result_generator - INFO - Обрабатываю 1 результатов расчетов
+2025-08-18 14:29:13,725 - src.implementations.result_generator - INFO - Создана сводка: 0/1 успешных расчетов
+2025-08-18 14:29:13,738 - src.implementations.result_generator - INFO - Excel файл создан с 2 листами
+2025-08-18 14:29:13,748 - src.implementations.result_generator - INFO - Файл результатов создан: /tmp/shipping_results_20250818_142913_o8cxv6tl.xlsx
+2025-08-18 14:29:13,750 - src.services.bot_service - INFO - Создан файл результатов: /tmp/shipping_results_20250818_142913_o8cxv6tl.xlsx
+2025-08-18 14:29:13,751 - src.services.bot_service - ERROR - Ошибка отправки результатов: InputFile() takes no arguments
+2025-08-18 14:29:13,944 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot7982747371:AAGtC6hjyKMQY_I51BhxkdHBW9tbzmH1Zy4/sendMessage "HTTP/1.1 200 OK"
