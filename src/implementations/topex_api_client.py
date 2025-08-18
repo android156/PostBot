@@ -347,38 +347,47 @@ class TopExApiClient(IApiClient):
                 'weight': weight
             }
 
-            logger.debug(
-                f"Выполняю расчет: {origin_code} -> {destination_code}, {weight}кг"
+            logger.info(
+                f"Выполняю расчет стоимости: {origin_code} -> {destination_code}, {weight}кг"
             )
+            logger.debug(f"URL: {calc_url}")
+            logger.debug(f"Параметры: {params}")
 
             async with self._session.get(calc_url, params=params) as response:
+                logger.info(f"Получен ответ от API расчета: статус {response.status}")
+                
                 if response.status == 200:
                     data = await response.json()
+                    logger.debug(f"Данные ответа API: {data}")
 
                     if data and data.get('status'):
                         # Обрабатываем успешный ответ с предложениями
-                        offers = self._parse_shipping_offers(
-                            data.get('data', []), weight)
+                        api_data = data.get('data', [])
+                        logger.info(f"API вернул {len(api_data)} предложений")
+                        
+                        offers = self._parse_shipping_offers(api_data, weight)
+                        logger.info(f"Обработано {len(offers)} предложений")
 
                         # Находим самое дешевое предложение
                         cheapest_offer = min(
                             offers, key=lambda x: x.price) if offers else None
 
+                        if cheapest_offer:
+                            logger.info(f"Лучшее предложение: {cheapest_offer.company_name} - {cheapest_offer.price}₽")
+
                         return {
-                            'success':
-                            True,
+                            'success': True,
                             'offers': [offer.to_dict() for offer in offers],
-                            'cheapest_offer':
-                            cheapest_offer.to_dict()
-                            if cheapest_offer else None,
-                            'offers_count':
-                            len(offers)
+                            'cheapest_offer': cheapest_offer.to_dict() if cheapest_offer else None,
+                            'offers_count': len(offers)
                         }
                     else:
                         error_msg = data.get('error', 'Неизвестная ошибка API')
-                        return self._create_error_result(
-                            "Ошибка API", error_msg)
+                        logger.error(f"API вернул ошибку: {error_msg}")
+                        return self._create_error_result("Ошибка API", error_msg)
                 else:
+                    response_text = await response.text()
+                    logger.error(f"HTTP ошибка {response.status}: {response_text}")
                     return self._create_error_result(
                         "HTTP ошибка", f"Код ответа: {response.status}")
 

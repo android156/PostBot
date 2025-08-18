@@ -15,7 +15,7 @@ import asyncio
 from typing import Dict, Any, List
 from datetime import datetime
 
-from telegram import Update
+from telegram import Update, InputFile
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
 
@@ -256,12 +256,14 @@ class BotService(IBotService):
                 # Рассчитываем для каждой весовой категории
                 for weight in self._weight_categories:
                     try:
-                        logger.debug(f"Расчет для {route.get_display_name()}, вес {weight}кг")
+                        logger.info(f"Расчет для {route.get_display_name()}, вес {weight}кг")
                         
                         # Вызываем API для расчета
                         api_result = await self._api_client.calculate_shipping_cost(
                             route.origin, route.destination, weight
                         )
+                        
+                        logger.info(f"Результат API для {route.get_display_name()}: success={api_result.get('success', False)}")
                         
                         # Создаем результат для весовой категории
                         weight_result = self._process_api_result(api_result, weight)
@@ -513,18 +515,20 @@ class BotService(IBotService):
             logger.error(f"Ошибка скачивания и обработки файла: {e}")
             return []
     
-    def _process_api_result(self, api_result: Dict[str, Any], weight: int) -> WeightCategoryResult:
+    def _process_api_result(self, api_result: Dict[str, Any], weight: float) -> WeightCategoryResult:
         """
         Обрабатывает результат API в объект WeightCategoryResult.
         
         Args:
             api_result (Dict[str, Any]): Результат от API
-            weight (int): Вес категории
+            weight (float): Вес категории в килограммах
             
         Returns:
             WeightCategoryResult: Обработанный результат
         """
-        weight_result = WeightCategoryResult(weight=weight)
+        # Конвертируем вес в граммы для WeightCategoryResult
+        weight_in_grams = int(weight * 1000)
+        weight_result = WeightCategoryResult(weight=weight_in_grams)
         
         if api_result.get('success'):
             # Обрабатываем успешный результат
@@ -537,7 +541,7 @@ class BotService(IBotService):
                         price=float(offer_data.get('price', 0)),
                         delivery_days=int(offer_data.get('delivery_days', 0)),
                         tariff_name=offer_data.get('tariff_name', ''),
-                        weight=weight,
+                        weight=weight_in_grams,  # Используем вес в граммах
                         additional_info=offer_data.get('additional_info', {})
                     )
                     weight_result.add_offer(offer)
@@ -633,13 +637,11 @@ class BotService(IBotService):
             """.strip()
             
             # Отправляем файл
-            with open(result_file_path, 'rb') as file:
-                await update.message.reply_document(
-                    document=file,
-                    filename="shipping_results.xlsx",
-                    caption=report_text,
-                    parse_mode=ParseMode.MARKDOWN
-                )
+            await update.message.reply_document(
+                document=InputFile(result_file_path, filename="shipping_results.xlsx"),
+                caption=report_text,
+                parse_mode=ParseMode.MARKDOWN
+            )
             
             logger.info("Результаты успешно отправлены пользователю")
             
