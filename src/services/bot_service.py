@@ -222,11 +222,10 @@ class BotService(IBotService):
         Выполняет расчет стоимости доставки для списка маршрутов.
         
         Основной алгоритм расчета:
-        1. Для каждого маршрута
-        2. Для каждой весовой категории
-        3. Запрашивает стоимость у API
-        4. Находит лучшие предложения
-        5. Формирует результат
+        1. Предварительно получает коды городов для всех маршрутов
+        2. Для каждого маршрута и весовой категории выполняет расчет
+        3. Находит лучшие предложения
+        4. Формирует результат
         
         Args:
             routes_data (List[Dict[str, Any]]): Список маршрутов для расчета
@@ -237,11 +236,14 @@ class BotService(IBotService):
         logger.info(f"Начинаю расчет стоимости для {len(routes_data)} маршрутов")
         logger.info(f"Весовые категории: {self._weight_categories}")
         
+        # Шаг 1: Предварительно получаем коды городов для всех маршрутов
+        routes_with_codes = await self._resolve_all_city_codes(routes_data)
+        
         calculation_results = []
-        total_calculations = len(routes_data) * len(self._weight_categories)
+        total_calculations = len(routes_with_codes) * len(self._weight_categories)
         completed_calculations = 0
         
-        for route_data in routes_data:
+        for route_data in routes_with_codes:
             try:
                 # Создаем объект маршрута
                 route = Route(
@@ -249,6 +251,14 @@ class BotService(IBotService):
                     destination=route_data['destination'],
                     row_index=route_data['row_index']
                 )
+                
+                # Проверяем, что коды городов найдены
+                origin_code = route_data.get('origin_code')
+                destination_code = route_data.get('destination_code')
+                
+                if not origin_code or not destination_code:
+                    logger.warning(f"Пропускаю маршрут {route.get_display_name()} - не найдены коды городов")
+                    continue
                 
                 # Создаем результат для маршрута
                 route_result = RouteCalculationResult(route=route)
@@ -258,9 +268,9 @@ class BotService(IBotService):
                     try:
                         logger.info(f"Расчет для {route.get_display_name()}, вес {weight}кг")
                         
-                        # Вызываем API для расчета
+                        # Вызываем API для расчета с готовыми кодами городов
                         api_result = await self._api_client.calculate_shipping_cost(
-                            route.origin, route.destination, weight
+                            origin_code, destination_code, weight
                         )
                         
                         logger.info(f"Результат API для {route.get_display_name()}: success={api_result.get('success', False)}")
@@ -744,6 +754,63 @@ class BotService(IBotService):
         except Exception as e:
             logger.error(f"Ошибка создания CSV fallback: {e}")
             raise
+    
+    async def _resolve_all_city_codes(self, routes_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Предварительно получает коды городов для всех маршрутов.
+        
+        Оптимизирует производительность, получая коды городов один раз
+        для каждого маршрута вместо повторных запросов на каждый вес.
+        
+        Args:
+            routes_data (List[Dict[str, Any]]): Исходные данные маршрутов
+            
+        Returns:
+            List[Dict[str, Any]]: Маршруты с добавленными кодами городов
+        """
+        logger.info("Предварительно получаю коды городов для всех маршрутов...")
+        
+        # Собираем уникальные города для батчевого запроса
+        unique_cities = set()
+        for route_data in routes_data:
+            unique_cities.add(route_data['origin'])
+            unique_cities.add(route_data['destination'])
+        
+        logger.info(f"Найдено {len(unique_cities)} уникальных городов для резолва")
+        
+        # Кеш для кодов городов
+        city_codes_cache = {}
+        
+        # Получаем коды для всех уникальных городов
+        for city in unique_cities:
+            try:
+                # Используем существующий метод API клиента
+                city_code = await self._api_client._resolve_city_code(city)
+                city_codes_cache[city] = city_code
+                
+                if city_code:
+                    logger.debug(f"Получен код для города '{city}': {city_code}")
+                else:
+                    logger.warning(f"Не найден код для города '{city}'")
+                    
+            except Exception as e:
+                logger.error(f"Ошибка получения кода для города '{city}': {e}")
+                city_codes_cache[city] = None
+        
+        # Обогащаем маршруты кодами городов
+        routes_with_codes = []
+        for route_data in routes_data:
+            enhanced_route = route_data.copy()
+            enhanced_route['origin_code'] = city_codes_cache.get(route_data['origin'])
+            enhanced_route['destination_code'] = city_codes_cache.get(route_data['destination'])
+            routes_with_codes.append(enhanced_route)
+        
+        successful_routes = sum(1 for r in routes_with_codes 
+                              if r.get('origin_code') and r.get('destination_code'))
+        
+        logger.info(f"Коды городов получены: {successful_routes}/{len(routes_data)} маршрутов готовы к расчету")
+        
+        return routes_with_codes
     
     # async def _send_error_message(self, update, error_message: str) -> None:
     #     """
