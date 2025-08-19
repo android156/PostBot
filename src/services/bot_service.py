@@ -245,6 +245,9 @@ class BotService(IBotService):
         logger.info(f"Начинаю расчет стоимости для {len(routes_data)} маршрутов")
         logger.info(f"Весовые категории: {self._weight_categories}")
         
+        # Засекаем время начала обработки
+        processing_start_time = datetime.now()
+        
         # Шаг 1: Предварительно получаем коды городов для всех маршрутов
         routes_with_codes = await self._resolve_all_city_codes(routes_data)
         
@@ -354,6 +357,10 @@ class BotService(IBotService):
                         pass
                 continue
         
+        # Рассчитываем общее время обработки
+        processing_end_time = datetime.now()
+        total_processing_time = processing_end_time - processing_start_time
+        
         # Создаем общую сводку результатов
         summary = self._create_calculation_summary(calculation_results)
         
@@ -364,7 +371,9 @@ class BotService(IBotService):
             'total_routes': len(routes_data),
             'processed_routes': len(calculation_results),
             'total_api_calls': self._stats['total_api_calls'],
-            'calculation_time': datetime.now().isoformat()
+            'calculation_time': datetime.now().isoformat(),
+            'processing_time_seconds': total_processing_time.total_seconds(),
+            'processing_time_formatted': self._format_processing_time(total_processing_time)
         }
         
         logger.info(f"Расчет завершен: {len(calculation_results)} маршрутов обработано")
@@ -696,6 +705,7 @@ class BotService(IBotService):
             summary = results.get('summary', {})
             
             # Формируем текст с кратким отчетом
+            processing_time = results.get('processing_time_formatted', 'неизвестно')
             report_text = f"""
 ✅ **Расчет завершен!**
 
@@ -704,6 +714,7 @@ class BotService(IBotService):
 • Успешных расчетов: {summary.get('successful_routes', 0)}
 • Процент успеха: {summary.get('success_rate', 0):.1f}%
 • Всего вызовов API: {results.get('total_api_calls', 0)}
+• ⏱️ Время обработки: {processing_time}
 
 📋 Подробные результаты во вложенном Excel файле.
             """.strip()
@@ -962,6 +973,47 @@ class BotService(IBotService):
         logger.info(f"Коды городов получены: {successful_routes}/{len(routes_data)} маршрутов готовы к расчету")
         
         return routes_with_codes
+    
+    def _format_processing_time(self, time_delta) -> str:
+        """
+        Форматирует время обработки в удобочитаемый вид.
+        
+        Args:
+            time_delta: Объект timedelta с временем обработки
+            
+        Returns:
+            str: Отформатированное время (например, "2 мин 15 сек")
+        """
+        total_seconds = int(time_delta.total_seconds())
+        
+        if total_seconds < 60:
+            return f"{total_seconds} сек"
+        
+        minutes = total_seconds // 60
+        seconds = total_seconds % 60
+        
+        if minutes < 60:
+            if seconds > 0:
+                return f"{minutes} мин {seconds} сек"
+            else:
+                return f"{minutes} мин"
+        
+        hours = minutes // 60
+        minutes = minutes % 60
+        
+        if hours == 1:
+            hour_text = "час"
+        elif hours in [2, 3, 4]:
+            hour_text = "часа"
+        else:
+            hour_text = "часов"
+        
+        if minutes > 0 and seconds > 0:
+            return f"{hours} {hour_text} {minutes} мин {seconds} сек"
+        elif minutes > 0:
+            return f"{hours} {hour_text} {minutes} мин"
+        else:
+            return f"{hours} {hour_text}"
     
     # async def _send_error_message(self, update, error_message: str) -> None:
     #     """
