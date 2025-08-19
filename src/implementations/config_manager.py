@@ -38,7 +38,7 @@ class ConfigManager(IConfig):
         """
         # Настройки по умолчанию (принцип DRY)
         self._default_settings = {
-            'api_timeout': 30,
+            'api_timeout': 150,
             'max_file_size': 10 * 1024 * 1024,  # 10 MB
             'retry_count': 3,
             'rate_limit_delay': 1.0,

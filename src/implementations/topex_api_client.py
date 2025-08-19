@@ -331,6 +331,7 @@ class TopExApiClient(IApiClient):
             
         Returns:
             Dict[str, Any]: Результат расчета
+
         """
         try:
             await self._ensure_session()
