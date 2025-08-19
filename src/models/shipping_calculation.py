@@ -45,7 +45,7 @@ class ShippingOffer:
         """
         if self.price < 0:
             raise ValueError("Стоимость доставки не может быть отрицательной")
-        if self.delivery_days < 0:
+        if self.delivery_days < -1:  # Разрешаем -1 как специальное значение для "по запросу"
             raise ValueError("Срок доставки не может быть отрицательным")
         if self.weight <= 0:
             raise ValueError("Вес должен быть положительным числом")
@@ -89,10 +89,13 @@ class ShippingOffer:
         Returns:
             Dict[str, Any]: Словарь с данными предложения
         """
+        # Обрабатываем специальное значение -1 как "по запросу"
+        delivery_days_display = "по запросу" if self.delivery_days == -1 else self.delivery_days
+        
         return {
             'company_name': self.company_name,
             'price': self.price,
-            'delivery_days': self.delivery_days,
+            'delivery_days': delivery_days_display,
             'tariff_name': self.tariff_name,
             'weight': self.weight,
             'weight_kg': self.weight,
