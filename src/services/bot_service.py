@@ -71,6 +71,7 @@ class BotService(IBotService):
         self._file_settings = self._config.get_file_processing_settings()
         self._weight_categories = self._config.get_weight_categories()
         self._rate_limit_delay = self._config.get_api_settings().get('rate_limit_delay', 1.0)
+        self._max_concurrent_requests = self._config.get_max_concurrent_requests()
         
         # Статистика для мониторинга
         self._stats = {
@@ -226,13 +227,14 @@ class BotService(IBotService):
         progress_message=None
     ) -> Dict[str, Any]:
         """
-        Выполняет расчет стоимости доставки для списка маршрутов.
+        Выполняет расчет стоимости доставки для списка маршрутов с глобальной оптимизацией.
         
         Основной алгоритм расчета:
         1. Предварительно получает коды городов для всех маршрутов
-        2. Для каждого маршрута и весовой категории выполняет расчет
-        3. Находит лучшие предложения
-        4. Формирует результат
+        2. Создает все возможные задачи расчета (маршрут + вес)
+        3. Группирует задачи в батчи по max_concurrent_requests
+        4. Выполняет батчи параллельно с уведомлениями о прогрессе
+        5. Формирует результат
         
         Args:
             routes_data (List[Dict[str, Any]]): Список маршрутов для расчета
@@ -242,120 +244,55 @@ class BotService(IBotService):
         Returns:
             Dict[str, Any]: Результаты расчета для всех маршрутов
         """
-        logger.info(f"Начинаю расчет стоимости для {len(routes_data)} маршрутов")
+        logger.info(f"Начинаю глобально оптимизированный расчет стоимости для {len(routes_data)} маршрутов")
         logger.info(f"Весовые категории: {self._weight_categories}")
+        logger.info(f"Максимальное количество одновременных запросов: {self._max_concurrent_requests}")
         
         # Засекаем время начала обработки
         processing_start_time = datetime.now()
         
         # Шаг 1: Предварительно получаем коды городов для всех маршрутов
+        if progress_message:
+            try:
+                await progress_message.edit_text("🔄 Получаю коды городов...")
+            except:
+                pass
+        
         routes_with_codes = await self._resolve_all_city_codes(routes_data)
         
-        calculation_results = []
-        total_calculations = len(routes_with_codes) * len(self._weight_categories)
-        completed_calculations = 0
+        # Фильтруем маршруты с найденными кодами
+        valid_routes = []
+        for route_data in routes_with_codes:
+            origin_code = route_data.get('origin_code')
+            destination_code = route_data.get('destination_code')
+            
+            if origin_code and destination_code:
+                valid_routes.append(route_data)
+            else:
+                route_name = route_data.get('origin', 'Неизвестно') + ' → ' + route_data.get('destination', 'Неизвестно')
+                logger.warning(f"Пропускаю маршрут {route_name} - не найдены коды городов")
         
-        for route_index, route_data in enumerate(routes_with_codes):
-            try:
-                # Создаем объект маршрута
-                route = Route(
-                    origin=route_data['origin'],
-                    destination=route_data['destination'],
-                    row_index=route_data['row_index']
-                )
-                
-                # Проверяем, что коды городов найдены
-                origin_code = route_data.get('origin_code')
-                destination_code = route_data.get('destination_code')
-                
-                if not origin_code or not destination_code:
-                    logger.warning(f"Пропускаю маршрут {route.get_display_name()} - не найдены коды городов")
-                    
-                    # Отправляем уведомление о пропуске маршрута
-                    if progress_message:
-                        remaining_routes = len(routes_with_codes) - route_index - 1
-                        skip_text = f"⚠️ Пропускаю маршрут {route.get_display_name()} (не найдены коды городов)\n"
-                        skip_text += f"📊 Обработано: {route_index + 1}/{len(routes_with_codes)}, осталось: {remaining_routes}"
-                        try:
-                            await progress_message.edit_text(skip_text)
-                        except:
-                            pass
-                    continue
-                
-                # Отправляем уведомление о начале обработки текущего маршрута
-                if progress_message:
-                    remaining_routes = len(routes_with_codes) - route_index - 1
-                    current_text = f"🚀 Обрабатываю маршрут: {route.get_display_name()}\n"
-                    current_text += f"📊 Прогресс: {route_index + 1}/{len(routes_with_codes)}, осталось: {remaining_routes}\n"
-                    current_text += f"⚖️ Тестирую {len(self._weight_categories)} весовых категорий..."
-                    try:
-                        await progress_message.edit_text(current_text)
-                    except:
-                        pass
-                
-                logger.info(f"🚀 Начинаю асинхронный расчет для маршрута {route.get_display_name()} ({route_index + 1}/{len(routes_with_codes)})")
-                
-                # Асинхронно рассчитываем все веса для маршрута
-                route_result = await self._calculate_route_all_weights_async(
-                    route, origin_code, destination_code
-                )
-                
-                if route_result:
-                    calculation_results.append(route_result.to_dict())
-                    completed_calculations += len(self._weight_categories)
-                    self._stats['total_api_calls'] += len(self._weight_categories)
-                    
-                    # Логируем прогресс
-                    progress = (completed_calculations / total_calculations) * 100
-                    logger.info(f"✅ Маршрут {route.get_display_name()} завершен. Прогресс: {progress:.1f}% ({completed_calculations}/{total_calculations})")
-                    
-                    # Отправляем уведомление о завершении обработки маршрута
-                    if progress_message:
-                        remaining_routes = len(routes_with_codes) - route_index - 1
-                        success_text = f"✅ Завершен маршрут: {route.get_display_name()}\n"
-                        success_text += f"📊 Обработано: {route_index + 1}/{len(routes_with_codes)}"
-                        
-                        if remaining_routes > 0:
-                            success_text += f", осталось: {remaining_routes}\n"
-                            
-                            # Рассчитываем примерное время до завершения
-                            if route_index > 0:  # Избегаем деления на ноль
-                                avg_time_per_route = (datetime.now() - self._stats['start_time']).total_seconds() / (route_index + 1)
-                                estimated_time_left = avg_time_per_route * remaining_routes
-                                
-                                if estimated_time_left < 60:
-                                    success_text += f"⏱️ Примерно осталось: {int(estimated_time_left)} сек"
-                                else:
-                                    minutes = int(estimated_time_left // 60)
-                                    seconds = int(estimated_time_left % 60)
-                                    success_text += f"⏱️ Примерно осталось: {minutes} мин {seconds} сек"
-                        else:
-                            success_text += "\n🎉 Все маршруты обработаны!"
-                        
-                        try:
-                            await progress_message.edit_text(success_text)
-                        except:
-                            pass
-                    
-                    # Добавляем задержку между маршрутами для rate limiting
-                    if route_index < len(routes_with_codes) - 1:  # Не ждем после последнего маршрута
-                        await asyncio.sleep(self._rate_limit_delay)
-                
-            except Exception as e:
-                logger.error(f"Ошибка обработки маршрута {route_data}: {e}")
-                
-                # Отправляем уведомление об ошибке
-                if progress_message:
-                    route_name = route_data.get('origin', 'Неизвестно') + ' → ' + route_data.get('destination', 'Неизвестно')
-                    remaining_routes = len(routes_with_codes) - route_index - 1
-                    error_text = f"❌ Ошибка при обработке: {route_name}\n"
-                    error_text += f"📊 Обработано: {route_index + 1}/{len(routes_with_codes)}, осталось: {remaining_routes}"
-                    try:
-                        await progress_message.edit_text(error_text)
-                        await asyncio.sleep(2)  # Показываем ошибку 2 секунды
-                    except:
-                        pass
-                continue
+        logger.info(f"Готово к расчету: {len(valid_routes)} из {len(routes_data)} маршрутов")
+        
+        if not valid_routes:
+            logger.error("Нет маршрутов с найденными кодами городов")
+            return {
+                'success': False,
+                'error': 'Не найдены коды городов ни для одного маршрута',
+                'results': [],
+                'summary': {'total_routes': 0, 'successful_routes': 0, 'success_rate': 0},
+                'total_routes': len(routes_data),
+                'processed_routes': 0,
+                'total_api_calls': 0,
+                'calculation_time': datetime.now().isoformat(),
+                'processing_time_seconds': 0,
+                'processing_time_formatted': '0 сек'
+            }
+        
+        # Шаг 2: Выполняем батчевые расчеты
+        calculation_results = await self._execute_batched_calculations(
+            valid_routes, update, progress_message
+        )
         
         # Рассчитываем общее время обработки
         processing_end_time = datetime.now()
@@ -376,7 +313,7 @@ class BotService(IBotService):
             'processing_time_formatted': self._format_processing_time(total_processing_time)
         }
         
-        logger.info(f"Расчет завершен: {len(calculation_results)} маршрутов обработано")
+        logger.info(f"Глобально оптимизированный расчет завершен: {len(calculation_results)} маршрутов обработано")
         return result
     
     async def start_bot(self) -> None:
@@ -452,6 +389,8 @@ class BotService(IBotService):
 **Тестируемые весовые категории:** {weights_text}
 
 **Максимальный размер файла:** {self._file_settings['max_file_size'] // (1024*1024)}MB
+
+**⚡ Высокая производительность:** До {self._max_concurrent_requests} одновременных запросов к API!
 
 Для получения подробной справки используйте команду /help
         """.strip()
@@ -821,6 +760,144 @@ class BotService(IBotService):
             logger.error(f"Ошибка создания CSV fallback: {e}")
             raise
     
+    async def _execute_batched_calculations(
+        self,
+        valid_routes: List[Dict[str, Any]],
+        update=None,
+        progress_message=None
+    ) -> List[Dict[str, Any]]:
+        """
+        Выполняет расчеты в батчах для максимальной производительности.
+        
+        Создает все возможные задачи расчета и группирует их в батчи
+        по max_concurrent_requests для оптимального использования API.
+        
+        Args:
+            valid_routes: Список маршрутов с найденными кодами городов
+            update: Объект обновления Telegram (опционально)
+            progress_message: Сообщение для редактирования прогресса (опционально)
+            
+        Returns:
+            List[Dict[str, Any]]: Результаты расчетов для всех маршрутов
+        """
+        # Создаем все задачи расчета
+        calculation_tasks = []
+        route_objects = {}
+        
+        for route_data in valid_routes:
+            route = Route(
+                origin=route_data['origin'],
+                destination=route_data['destination'],
+                row_index=route_data['row_index']
+            )
+            route_objects[route.get_display_name()] = route
+            
+            origin_code = route_data['origin_code']
+            destination_code = route_data['destination_code']
+            
+            for weight in self._weight_categories:
+                task_data = {
+                    'route': route,
+                    'origin_code': origin_code,
+                    'destination_code': destination_code,
+                    'weight': weight
+                }
+                calculation_tasks.append(task_data)
+        
+        total_tasks = len(calculation_tasks)
+        logger.info(f"Создано {total_tasks} задач расчета ({len(valid_routes)} маршрутов × {len(self._weight_categories)} весов)")
+        
+        # Группируем задачи в батчи
+        batch_size = self._max_concurrent_requests
+        batches = [calculation_tasks[i:i + batch_size] for i in range(0, total_tasks, batch_size)]
+        
+        logger.info(f"Разделено на {len(batches)} батчей по {batch_size} запросов максимум")
+        
+        # Словарь для накопления результатов по маршрутам
+        route_results = {}
+        completed_tasks = 0
+        
+        # Выполняем батчи последовательно
+        for batch_index, batch in enumerate(batches):
+            logger.info(f"🚀 Выполняю батч {batch_index + 1}/{len(batches)} ({len(batch)} запросов)")
+            
+            # Уведомляем пользователя о начале батча
+            if progress_message:
+                batch_progress = f"⚡ Батч {batch_index + 1}/{len(batches)}: {len(batch)} запросов\n"
+                batch_progress += f"📊 Выполнено: {completed_tasks}/{total_tasks} задач\n"
+                batch_progress += f"🎯 Прогресс: {(completed_tasks / total_tasks) * 100:.1f}%"
+                try:
+                    await progress_message.edit_text(batch_progress)
+                except:
+                    pass
+            
+            # Создаем задачи для текущего батча
+            async_tasks = []
+            for task_data in batch:
+                task = self._calculate_single_weight_async(
+                    task_data['route'],
+                    task_data['origin_code'],
+                    task_data['destination_code'],
+                    task_data['weight']
+                )
+                async_tasks.append((task, task_data))
+            
+            # Выполняем все задачи батча параллельно
+            batch_results = await asyncio.gather(*[task for task, _ in async_tasks], return_exceptions=True)
+            
+            # Обрабатываем результаты батча
+            for i, (result, task_data) in enumerate(zip(batch_results, [task_data for _, task_data in async_tasks])):
+                route = task_data['route']
+                weight = task_data['weight']
+                route_name = route.get_display_name()
+                
+                # Инициализируем результат маршрута если нужно
+                if route_name not in route_results:
+                    route_results[route_name] = RouteCalculationResult(route=route)
+                
+                # Добавляем результат веса
+                if isinstance(result, Exception):
+                    logger.error(f"Ошибка расчета для {route_name}, вес {weight}кг: {result}")
+                    error_result = WeightCategoryResult(weight=int(weight * 1000), calculation_error=str(result))
+                    route_results[route_name].add_weight_result(error_result)
+                else:
+                    route_results[route_name].add_weight_result(result)
+                
+                completed_tasks += 1
+                self._stats['total_api_calls'] += 1
+            
+            # Логируем прогресс батча
+            batch_progress_percent = (completed_tasks / total_tasks) * 100
+            logger.info(f"✅ Батч {batch_index + 1}/{len(batches)} завершен. Общий прогресс: {batch_progress_percent:.1f}% ({completed_tasks}/{total_tasks})")
+            
+            # Уведомляем пользователя о завершении батча
+            if progress_message:
+                completed_progress = f"✅ Батч {batch_index + 1}/{len(batches)} завершен\n"
+                completed_progress += f"📊 Выполнено: {completed_tasks}/{total_tasks} задач\n"
+                completed_progress += f"🎯 Прогресс: {batch_progress_percent:.1f}%"
+                
+                if batch_index < len(batches) - 1:
+                    remaining_batches = len(batches) - batch_index - 1
+                    completed_progress += f"\n⏳ Осталось батчей: {remaining_batches}"
+                else:
+                    completed_progress += "\n🎉 Все батчи выполнены!"
+                
+                try:
+                    await progress_message.edit_text(completed_progress)
+                except:
+                    pass
+            
+            # Добавляем задержку между батчами для rate limiting (кроме последнего)
+            if batch_index < len(batches) - 1:
+                await asyncio.sleep(self._rate_limit_delay)
+        
+        # Конвертируем результаты в список словарей
+        calculation_results = [route_result.to_dict() for route_result in route_results.values()]
+        
+        logger.info(f"🎯 Глобально оптимизированный расчет завершен: {len(calculation_results)} маршрутов, {completed_tasks} запросов")
+        
+        return calculation_results
+
     async def _calculate_route_all_weights_async(
         self, 
         route: Route, 

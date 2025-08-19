@@ -114,6 +114,16 @@ class IConfig(ABC):
         pass
 
     @abstractmethod
+    def get_max_concurrent_requests(self) -> int:
+        """
+        Возвращает максимальное количество одновременных запросов к API.
+        
+        Returns:
+            int: Максимальное количество одновременных запросов
+        """
+        pass
+
+    @abstractmethod
     def to_dict(self) -> Dict[str, Any]:
         """
         Возвращает всю конфигурацию в виде словаря.

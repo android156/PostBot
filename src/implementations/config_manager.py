@@ -61,6 +61,7 @@ class ConfigManager(IConfig):
             'delivery_filter':
             ['До дверей'],  # Например: ['До дверей', 'Дверь - Склад']
             'detailed_log': False,
+            'max_concurrent_requests': 50,  # Максимальное количество одновременных запросов
         }
 
         # Загружаем настройки
@@ -299,7 +300,8 @@ class ConfigManager(IConfig):
             'MAX_FILE_SIZE': os.getenv('MAX_FILE_SIZE', 'default'),
             'API_TIMEOUT': os.getenv('API_TIMEOUT', 'default'),
             'LOG_LEVEL': os.getenv('LOG_LEVEL', 'default'),
-            'DETAILED_LOG': os.getenv('DETAILED_LOG', 'default')
+            'DETAILED_LOG': os.getenv('DETAILED_LOG', 'default'),
+            'MAX_CONCURRENT_REQUESTS': os.getenv('MAX_CONCURRENT_REQUESTS', 'default')
         }
 
         logger.info(f"Статус переменных окружения: {env_vars}")
@@ -327,6 +329,7 @@ class ConfigManager(IConfig):
             'api_parameters': self.get_api_parameters(),
             'delivery_filter': self.get_delivery_filter(),
             'detailed_log': self.get_detailed_log(),
+            'max_concurrent_requests': self.get_max_concurrent_requests(),
             'is_valid': self.validate_configuration()
         }
 
@@ -390,6 +393,24 @@ class ConfigManager(IConfig):
 
         return default_detailed_log
 
+    def get_max_concurrent_requests(self) -> int:
+        """
+        Возвращает максимальное количество одновременных запросов.
+
+        Returns:
+            int: Максимальное количество одновременных запросов
+        """
+        max_requests = int(
+            os.getenv('MAX_CONCURRENT_REQUESTS',
+                      str(self._default_settings['max_concurrent_requests'])))
+        if max_requests <= 0:
+            logger.warning(
+                f"Некорректное значение MAX_CONCURRENT_REQUESTS: {max_requests}. Используется значение по умолчанию: {self._default_settings['max_concurrent_requests']}"
+            )
+            return self._default_settings['max_concurrent_requests']
+        logger.info(f"Максимальное количество одновременных запросов: {max_requests}")
+        return max_requests
+
     def to_dict(self) -> Dict[str, Any]:
         """
         Возвращает всю конфигурацию в виде словаря.
@@ -413,6 +434,7 @@ class ConfigManager(IConfig):
             'api_parameters': self.get_api_parameters(),
             'delivery_filter': self.get_delivery_filter(),
             'detailed_log': self.get_detailed_log(),
+            'max_concurrent_requests': self.get_max_concurrent_requests(),
             'is_valid': self.validate_configuration()
         }
 
