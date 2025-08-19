@@ -211,30 +211,54 @@ class ExcelResultGenerator(IResultGenerator):
     
     def _generate_excel_file(self, results: List[Dict[str, Any]], file_path: str) -> None:
         """
-        Генерирует простой Excel файл с результатами.
+        Генерирует простой Excel файл с результатами используя прямое openpyxl.
         
         Args:
             results (List[Dict[str, Any]]): Результаты расчетов
             file_path (str): Путь к файлу для создания
         """
         try:
+            from openpyxl import Workbook
+            
             # Подготавливаем простые данные
             simple_data = self._prepare_simple_data(results)
             
             if not simple_data:
                 raise ValueError("Нет данных для создания файла")
             
-            # Создаем DataFrame
-            df = pd.DataFrame(simple_data)
+            logger.info(f"Создаю Excel файл с {len(simple_data)} строками данных")
             
-            # Создаем простой Excel файл
-            with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
-                df.to_excel(writer, sheet_name='Результаты', index=False)
+            # Создаем новый Excel файл напрямую через openpyxl
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "Результаты"
             
-            logger.info(f"Простой Excel файл создан с {len(simple_data)} строками")
+            # Добавляем заголовки
+            headers = ['Маршрут', 'Вес_кг', 'Компания', 'Цена_руб', 'Срок_дней']
+            for col_num, header in enumerate(headers, 1):
+                ws.cell(row=1, column=col_num, value=header)
+            
+            # Добавляем данные
+            for row_num, row_data in enumerate(simple_data, 2):
+                ws.cell(row=row_num, column=1, value=row_data.get('Маршрут', ''))
+                ws.cell(row=row_num, column=2, value=row_data.get('Вес_кг', 0.0))
+                ws.cell(row=row_num, column=3, value=row_data.get('Компания', ''))
+                ws.cell(row=row_num, column=4, value=row_data.get('Цена_руб', 0.0))
+                ws.cell(row=row_num, column=5, value=row_data.get('Срок_дней', 0))
+            
+            # Сохраняем файл
+            wb.save(file_path)
+            wb.close()
+            
+            # Проверяем размер файла
+            file_size = Path(file_path).stat().st_size
+            if file_size < 1000:  # Слишком маленький файл
+                raise ValueError(f"Созданный файл слишком мал: {file_size} байт")
+            
+            logger.info(f"Excel файл успешно создан с {len(simple_data)} строками (размер: {file_size} байт)")
             
         except Exception as e:
-            logger.error(f"Ошибка создания простого Excel файла: {e}")
+            logger.error(f"Ошибка создания Excel файла через openpyxl: {e}")
             raise ValueError(f"Не удалось создать Excel файл: {e}")
     
     def _generate_csv_file(self, results: List[Dict[str, Any]], file_path: str) -> None:
