@@ -811,20 +811,22 @@ class BotService(IBotService):
         batch_size = self._max_concurrent_requests
         batches = [calculation_tasks[i:i + batch_size] for i in range(0, total_tasks, batch_size)]
         
-        logger.info(f"Разделено на {len(batches)} батчей по {batch_size} запросов максимум")
+        logger.info(f"Разделено на {len(batches)} пачек по {batch_size} расчетов максимум")
         
         # Словарь для накопления результатов по маршрутам
         route_results = {}
         completed_tasks = 0
         
-        # Выполняем батчи последовательно
+        # Выполняем пачки последовательно
         for batch_index, batch in enumerate(batches):
-            logger.info(f"🚀 Выполняю батч {batch_index + 1}/{len(batches)} ({len(batch)} запросов)")
+            routes_in_batch = len(set(task['route'].get_display_name() for task in batch))
+            logger.info(f"🚀 Выполняю пачку {batch_index + 1}/{len(batches)} ({routes_in_batch} маршрутов, {len(batch)} расчетов)")
             
-            # Уведомляем пользователя о начале батча
+            # Уведомляем пользователя о начале пачки
             if progress_message:
-                batch_progress = f"⚡ Батч {batch_index + 1}/{len(batches)}: {len(batch)} запросов\n"
-                batch_progress += f"📊 Выполнено: {completed_tasks}/{total_tasks} задач\n"
+                routes_in_batch = len(set(task['route'].get_display_name() for task in batch))
+                batch_progress = f"⚡ Пачка {batch_index + 1}/{len(batches)}: {routes_in_batch} маршрутов\n"
+                batch_progress += f"📊 Выполнено: {completed_tasks}/{total_tasks} расчетов\n"
                 batch_progress += f"🎯 Прогресс: {(completed_tasks / total_tasks) * 100:.1f}%"
                 try:
                     await progress_message.edit_text(batch_progress)
@@ -866,28 +868,28 @@ class BotService(IBotService):
                 completed_tasks += 1
                 self._stats['total_api_calls'] += 1
             
-            # Логируем прогресс батча
+            # Логируем прогресс пачки
             batch_progress_percent = (completed_tasks / total_tasks) * 100
-            logger.info(f"✅ Батч {batch_index + 1}/{len(batches)} завершен. Общий прогресс: {batch_progress_percent:.1f}% ({completed_tasks}/{total_tasks})")
+            logger.info(f"✅ Пачка {batch_index + 1}/{len(batches)} завершена. Общий прогресс: {batch_progress_percent:.1f}% ({completed_tasks}/{total_tasks})")
             
-            # Уведомляем пользователя о завершении батча
+            # Уведомляем пользователя о завершении пачки
             if progress_message:
-                completed_progress = f"✅ Батч {batch_index + 1}/{len(batches)} завершен\n"
-                completed_progress += f"📊 Выполнено: {completed_tasks}/{total_tasks} задач\n"
+                completed_progress = f"✅ Пачка {batch_index + 1}/{len(batches)} завершена\n"
+                completed_progress += f"📊 Выполнено: {completed_tasks}/{total_tasks} расчетов\n"
                 completed_progress += f"🎯 Прогресс: {batch_progress_percent:.1f}%"
                 
                 if batch_index < len(batches) - 1:
                     remaining_batches = len(batches) - batch_index - 1
-                    completed_progress += f"\n⏳ Осталось батчей: {remaining_batches}"
+                    completed_progress += f"\n⏳ Осталось пачек: {remaining_batches}"
                 else:
-                    completed_progress += "\n🎉 Все батчи выполнены!"
+                    completed_progress += "\n🎉 Все пачки обработаны!"
                 
                 try:
                     await progress_message.edit_text(completed_progress)
                 except:
                     pass
             
-            # Добавляем задержку между батчами для rate limiting (кроме последнего)
+            # Добавляем задержку между пачками для rate limiting (кроме последней)
             if batch_index < len(batches) - 1:
                 await asyncio.sleep(self._rate_limit_delay)
         
