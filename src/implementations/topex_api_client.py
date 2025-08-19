@@ -402,7 +402,7 @@ class TopExApiClient(IApiClient):
         
         Args:
             api_data (List[Dict]): Данные от API
-            weight (int): Вес груза
+            weight (float): Вес груза в килограммах
             
         Returns:
             List[ShippingOffer]: Список предложений
@@ -411,22 +411,53 @@ class TopExApiClient(IApiClient):
 
         for item in api_data:
             try:
+                # Извлекаем данные согласно реальной структуре API
+                company_name = item.get('deliveryCompanyLabel', 'Неизвестная компания')
+                
+                # Используем user_price как основную цену, если нет - берем retailPrice
+                price = item.get('user_price')
+                if price is None:
+                    price = item.get('retailPrice', 0)
+                
+                # Срок доставки из totalDeliveryDaysCount
+                delivery_days = item.get('totalDeliveryDaysCount', 0)
+                
+                # Название тарифа
+                tariff_name = item.get('tariffName', 'Стандартный тариф')
+                
+                # Дополнительная информация о способе доставки
+                delivery_method_label = item.get('deliveryMethodLabel', '')
+                if delivery_method_label:
+                    tariff_display = f"{tariff_name} ({delivery_method_label})"
+                else:
+                    tariff_display = tariff_name
+
                 offer = ShippingOffer(
-                    company_name=item.get('deliveryCompany',
-                                          'Неизвестная компания'),
-                    price=float(item.get('price', 0)),
-                    delivery_days=int(item.get('deliveryTime', 0)),
-                    tariff_name=item.get('tariffName', 'Стандартный тариф'),
-                    weight=int(weight *
-                               1000),  # Конвертируем кг в граммы для модели
+                    company_name=company_name,
+                    price=float(price),
+                    delivery_days=int(delivery_days),
+                    tariff_name=tariff_display,
+                    weight=int(weight * 1000),  # Конвертируем кг в граммы для модели
                     additional_info={
                         'tariff_id': item.get('tariffId'),
-                        'company_id': item.get('deliveryCompanyId'),
+                        'delivery_company_id': item.get('deliveryCompany'),
+                        'delivery_method': item.get('deliveryMethod'),
+                        'delivery_method_label': item.get('deliveryMethodLabel'),
+                        'retail_price': item.get('retailPrice'),
+                        'user_price_without_discount': item.get('user_price_without_discount'),
+                        'active_discount': item.get('activeDiscount'),
+                        'min_period': item.get('minPeriod'),
+                        'max_period': item.get('maxPeriod'),
+                        'pickup_days_count': item.get('pickupDaysCount'),
+                        'delivery_days_count': item.get('deliveryDaysCount'),
+                        'sort': item.get('sort'),
+                        'period_sort': item.get('periodSort'),
+                        'delivery_company_icon': item.get('deliveryCompanyIcon'),
                         'raw_data': item
                     })
                 offers.append(offer)
                 logger.debug(
-                    f"Добавлено предложение: {offer.company_name} - {offer.price}₽"
+                    f"Добавлено предложение: {offer.company_name} - {offer.tariff_name} - {offer.price}₽ за {offer.delivery_days} дн."
                 )
 
             except (ValueError, TypeError) as e:
