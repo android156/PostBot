@@ -56,7 +56,9 @@ class ConfigManager(IConfig):
             'topex_cargo_type':
             '81dd8a13-8235-494f-84fd-9c04c51d50ec',  # "документы
             'topex_cargo_seats_number': '1',
-            'topex_delivery_method': '1'  # 1 = доставка до дверей
+            'topex_delivery_method': '1',  # 1 = доставка до дверей
+            # Фильтр категорий доставки (пустой список = без фильтрации)
+            'delivery_filter': []  # Например: ['До дверей', 'Дверь - Склад']
         }
 
         # Загружаем настройки
@@ -320,7 +322,44 @@ class ConfigManager(IConfig):
             'logging': self.get_logging_settings(),
             'weight_categories': self.get_weight_categories(),
             'api_parameters': self.get_api_parameters(),
+            'delivery_filter': self.get_delivery_filter(),
             'is_valid': self.validate_configuration()
         }
 
         return config
+
+    def get_delivery_filter(self) -> list[str]:
+        """
+        Возвращает список разрешенных типов доставки для фильтрации.
+        
+        Если список пустой, фильтрация не применяется.
+        
+        Returns:
+            list[str]: Список разрешенных типов доставки
+        """
+        # Фильтр по умолчанию
+        default_filter = self._default_settings['delivery_filter']
+
+        delivery_filter_str = os.getenv('DELIVERY_FILTER', '')
+        if delivery_filter_str:
+            try:
+                # Парсим фильтр из строки вида "До дверей,Дверь - Склад,Склад - Дверь"
+                filter_list = [
+                    f.strip() for f in delivery_filter_str.split(',')
+                    if f.strip()
+                ]
+                logger.info(
+                    f"Используется настраиваемый фильтр доставки: {filter_list}")
+                return filter_list
+            except ValueError as e:
+                logger.warning(
+                    f"Ошибка парсинга фильтра доставки: {e}. Используются значения по умолчанию"
+                )
+
+        if default_filter:
+            logger.info(
+                f"Используется фильтр доставки по умолчанию: {default_filter}")
+        else:
+            logger.info("Фильтр доставки не настроен (все предложения проходят)")
+        
+        return default_filter

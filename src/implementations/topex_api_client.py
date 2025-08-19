@@ -539,6 +539,33 @@ class TopExApiClient(IApiClient):
             f"Распарсено {len(offers)} предложений из {len(api_data)} элементов"
         )
         
+        # Применяем фильтр категорий доставки
+        delivery_filter = self._config.get_delivery_filter()
+        if delivery_filter:
+            original_count = len(offers)
+            filtered_offers = []
+            
+            logger.info(f"🔍 Применяю фильтр доставки: {delivery_filter}")
+            
+            for offer in offers:
+                delivery_method_label = offer.additional_info.get('delivery_method_label', '')
+                # Проверяем, содержит ли метка доставки одно из разрешенных значений
+                if any(filter_term in delivery_method_label for filter_term in delivery_filter):
+                    filtered_offers.append(offer)
+                    logger.debug(f"✅ Прошло фильтр: {offer.company_name} - {delivery_method_label}")
+                else:
+                    logger.debug(f"❌ Отфильтровано: {offer.company_name} - {delivery_method_label}")
+            
+            offers = filtered_offers
+            filtered_count = len(offers)
+            
+            if filtered_count < original_count:
+                logger.info(f"📊 Фильтрация завершена: {original_count} → {filtered_count} предложений (удалено {original_count - filtered_count})")
+            else:
+                logger.info(f"📊 Фильтрация не изменила количество предложений: {filtered_count}")
+        else:
+            logger.debug("Фильтр доставки не настроен, используются все предложения")
+        
         # Детальное логирование всех предложений для веса
         if offers:
             logger.info(f"═══ ДЕТАЛЬНЫЙ СПИСОК ПРЕДЛОЖЕНИЙ ДЛЯ ВЕСА {weight}КГ ═══")
