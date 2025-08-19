@@ -487,10 +487,23 @@ class TopExApiClient(IApiClient):
                 # Используем user_price как основную цену, если нет - берем retailPrice
                 price = item.get('user_price')
                 if price is None:
-                    price = item.get('retailPrice', 0)
+                    price = item.get('retailPrice')
+                
+                # Пропускаем предложения с неопределенной ценой
+                if price is None:
+                    logger.debug(f"Пропускаю предложение {company_name} - цена не определена")
+                    continue
                 
                 # Срок доставки из totalDeliveryDaysCount
-                delivery_days = item.get('totalDeliveryDaysCount', 0)
+                delivery_days = item.get('totalDeliveryDaysCount')
+                if delivery_days is None:
+                    # Пробуем получить из deliveryDaysCount
+                    delivery_days = item.get('deliveryDaysCount')
+                
+                # Если сроки доставки не определены, используем специальное значение -1 для "по запросу"
+                if delivery_days is None:
+                    delivery_days = -1
+                    logger.debug(f"Срок доставки для {company_name} не определен, установлен как 'по запросу'")
                 
                 # Название тарифа
                 tariff_name = item.get('tariffName', 'Стандартный тариф')
