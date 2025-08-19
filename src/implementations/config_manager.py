@@ -48,8 +48,8 @@ class ConfigManager(IConfig):
             'max_log_file_size': 50 * 1024 * 1024,  # 50 MB
             'topex_api_base': 'https://lk.top-ex.ru/api',
             # Весовые категории по умолчанию в килограммах
-            # 'weight_categories': [0.5, 1.0, 2.0, 5.0, 10.0]
-            'weight_categories': [0.5, 3.0]
+            'weight_categories': [0.5, 1.0, 2.0, 5.0, 10.0]
+            #'weight_categories': [0.5, ]
         }
 
         # Загружаем настройки
