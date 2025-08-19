@@ -12,7 +12,7 @@
 import logging
 import tempfile
 import asyncio
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from datetime import datetime
 
 from telegram import Update, InputFile
@@ -70,6 +70,7 @@ class BotService(IBotService):
         # Получаем настройки из конфигурации
         self._file_settings = self._config.get_file_processing_settings()
         self._weight_categories = self._config.get_weight_categories()
+        self._rate_limit_delay = self._config.get_api_settings().get('rate_limit_delay', 1.0)
         
         # Статистика для мониторинга
         self._stats = {
@@ -243,7 +244,7 @@ class BotService(IBotService):
         total_calculations = len(routes_with_codes) * len(self._weight_categories)
         completed_calculations = 0
         
-        for route_data in routes_with_codes:
+        for route_index, route_data in enumerate(routes_with_codes):
             try:
                 # Создаем объект маршрута
                 route = Route(
@@ -260,40 +261,25 @@ class BotService(IBotService):
                     logger.warning(f"Пропускаю маршрут {route.get_display_name()} - не найдены коды городов")
                     continue
                 
-                # Создаем результат для маршрута
-                route_result = RouteCalculationResult(route=route)
+                logger.info(f"🚀 Начинаю асинхронный расчет для маршрута {route.get_display_name()} ({route_index + 1}/{len(routes_with_codes)})")
                 
-                # Рассчитываем для каждой весовой категории
-                for weight in self._weight_categories:
-                    try:
-                        logger.info(f"Расчет для {route.get_display_name()}, вес {weight}кг")
-                        
-                        # Используем оптимизированный метод прямого расчета с готовыми кодами
-                        api_result = await self._api_client.calculate_shipping_cost_with_codes(
-                            origin_code, destination_code, weight
-                        )
-                        
-                        logger.info(f"Результат API для {route.get_display_name()}: success={api_result.get('success', False)}")
-                        
-                        # Создаем результат для весовой категории
-                        weight_result = self._process_api_result(api_result, weight)
-                        route_result.add_weight_result(weight_result)
-                        
-                        completed_calculations += 1
-                        self._stats['total_api_calls'] += 1
-                        
-                        # Логируем прогресс каждые 10%
-                        progress = (completed_calculations / total_calculations) * 100
-                        if completed_calculations % max(1, total_calculations // 10) == 0:
-                            logger.info(f"Прогресс расчета: {progress:.1f}% ({completed_calculations}/{total_calculations})")
-                        
-                    except Exception as e:
-                        logger.error(f"Ошибка расчета для {route.get_display_name()}, вес {weight}кг: {e}")
-                        # Создаем результат с ошибкой
-                        error_result = WeightCategoryResult(weight=weight, calculation_error=str(e))
-                        route_result.add_weight_result(error_result)
+                # Асинхронно рассчитываем все веса для маршрута
+                route_result = await self._calculate_route_all_weights_async(
+                    route, origin_code, destination_code
+                )
                 
-                calculation_results.append(route_result.to_dict())
+                if route_result:
+                    calculation_results.append(route_result.to_dict())
+                    completed_calculations += len(self._weight_categories)
+                    self._stats['total_api_calls'] += len(self._weight_categories)
+                    
+                    # Логируем прогресс
+                    progress = (completed_calculations / total_calculations) * 100
+                    logger.info(f"✅ Маршрут {route.get_display_name()} завершен. Прогресс: {progress:.1f}% ({completed_calculations}/{total_calculations})")
+                    
+                    # Добавляем задержку между маршрутами для rate limiting
+                    if route_index < len(routes_with_codes) - 1:  # Не ждем после последнего маршрута
+                        await asyncio.sleep(self._rate_limit_delay)
                 
             except Exception as e:
                 logger.error(f"Ошибка обработки маршрута {route_data}: {e}")
@@ -755,6 +741,102 @@ class BotService(IBotService):
             logger.error(f"Ошибка создания CSV fallback: {e}")
             raise
     
+    async def _calculate_route_all_weights_async(
+        self, 
+        route: Route, 
+        origin_code: str, 
+        destination_code: str
+    ) -> Optional[RouteCalculationResult]:
+        """
+        Асинхронно рассчитывает стоимость доставки для всех весовых категорий маршрута.
+        
+        Выполняет все запросы для разных весов параллельно, что значительно
+        ускоряет обработку по сравнению с последовательными запросами.
+        
+        Args:
+            route (Route): Объект маршрута
+            origin_code (str): Код города отправления
+            destination_code (str): Код города назначения
+            
+        Returns:
+            Optional[RouteCalculationResult]: Результат расчета или None при ошибке
+        """
+        try:
+            # Создаем задачи для всех весовых категорий
+            tasks = []
+            for weight in self._weight_categories:
+                task = self._calculate_single_weight_async(
+                    route, origin_code, destination_code, weight
+                )
+                tasks.append(task)
+            
+            logger.debug(f"Создано {len(tasks)} задач для расчета весов: {self._weight_categories}")
+            
+            # Выполняем все задачи параллельно
+            weight_results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Создаем результат для маршрута
+            route_result = RouteCalculationResult(route=route)
+            
+            # Обрабатываем результаты
+            for i, result in enumerate(weight_results):
+                weight = self._weight_categories[i]
+                
+                if isinstance(result, Exception):
+                    logger.error(f"Ошибка расчета для {route.get_display_name()}, вес {weight}кг: {result}")
+                    # Создаем результат с ошибкой
+                    error_result = WeightCategoryResult(weight=int(weight * 1000), calculation_error=str(result))
+                    route_result.add_weight_result(error_result)
+                else:
+                    route_result.add_weight_result(result)
+            
+            logger.info(f"🎯 Асинхронный расчет завершен для {route.get_display_name()}: {len(weight_results)} весов обработано")
+            return route_result
+            
+        except Exception as e:
+            logger.error(f"Критическая ошибка асинхронного расчета для {route.get_display_name()}: {e}")
+            return None
+    
+    async def _calculate_single_weight_async(
+        self, 
+        route: Route, 
+        origin_code: str, 
+        destination_code: str, 
+        weight: float
+    ) -> WeightCategoryResult:
+        """
+        Асинхронно рассчитывает стоимость доставки для одной весовой категории.
+        
+        Args:
+            route (Route): Объект маршрута
+            origin_code (str): Код города отправления
+            destination_code (str): Код города назначения
+            weight (float): Вес в килограммах
+            
+        Returns:
+            WeightCategoryResult: Результат расчета для данного веса
+        """
+        try:
+            logger.debug(f"⚖️ Асинхронный расчет: {route.get_display_name()}, вес {weight}кг")
+            
+            # Выполняем API запрос
+            api_result = await self._api_client.calculate_shipping_cost_with_codes(
+                origin_code, destination_code, weight
+            )
+            
+            logger.debug(f"✅ API ответ для {route.get_display_name()}, {weight}кг: success={api_result.get('success', False)}")
+            
+            # Обрабатываем результат API
+            weight_result = self._process_api_result(api_result, weight)
+            
+            return weight_result
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка расчета для {route.get_display_name()}, вес {weight}кг: {e}")
+            # Возвращаем результат с ошибкой
+            weight_in_grams = int(weight * 1000)
+            return WeightCategoryResult(weight=weight_in_grams, calculation_error=str(e))
+
     async def _resolve_all_city_codes(self, routes_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
         Предварительно получает коды городов для всех маршрутов.
