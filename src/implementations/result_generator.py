@@ -246,6 +246,22 @@ class ExcelResultGenerator(IResultGenerator):
                 ws.cell(row=row_num, column=4, value=row_data.get('Цена_руб', 0.0))
                 ws.cell(row=row_num, column=5, value=row_data.get('Срок_дней', 0))
             
+            # Автоподгонка ширины колонок
+            for column in ws.columns:
+                max_length = 0
+                column_letter = column[0].column_letter
+                
+                for cell in column:
+                    try:
+                        if len(str(cell.value)) > max_length:
+                            max_length = len(str(cell.value))
+                    except:
+                        pass
+                
+                # Устанавливаем ширину с небольшим запасом
+                adjusted_width = min(max_length + 2, 50)  # Максимум 50 символов
+                ws.column_dimensions[column_letter].width = adjusted_width
+            
             # Сохраняем файл
             wb.save(file_path)
             wb.close()
