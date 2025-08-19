@@ -104,6 +104,16 @@ class IConfig(ABC):
         pass
 
     @abstractmethod
+    def get_detailed_log(self) -> bool:
+        """
+        Возвращает настройку детального логирования.
+        
+        Returns:
+            bool: True для детального логирования, False для краткого
+        """
+        pass
+
+    @abstractmethod
     def to_dict(self) -> Dict[str, Any]:
         """
         Возвращает всю конфигурацию в виде словаря.

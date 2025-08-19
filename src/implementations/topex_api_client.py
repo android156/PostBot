@@ -566,34 +566,43 @@ class TopExApiClient(IApiClient):
         else:
             logger.debug("Фильтр доставки не настроен, используются все предложения")
         
-        # Детальное логирование всех предложений для веса
+        # Логирование предложений (детальное или краткое)
         if offers:
-            logger.info(f"═══ ДЕТАЛЬНЫЙ СПИСОК ПРЕДЛОЖЕНИЙ ДЛЯ ВЕСА {weight}КГ ═══")
-            
-            # Сортируем предложения по цене для наглядности
+            # Сортируем предложения по цене для анализа
             sorted_offers = sorted(offers, key=lambda x: x.price)
+            best_offer = sorted_offers[0]
             
-            # Статистика
-            prices = [offer.price for offer in sorted_offers]
-            min_price = min(prices)
-            max_price = max(prices)
-            avg_price = sum(prices) / len(prices)
+            # Проверяем настройку детального логирования
+            detailed_log = self._config.get_detailed_log()
             
-            logger.info(f"📊 Статистика: {len(offers)} предложений, цены от {min_price}₽ до {max_price}₽ (среднее: {avg_price:.2f}₽)")
-            
-            # Топ-5 самых дешевых предложений
-            logger.info("🏆 ТОП-5 САМЫХ ДЕШЕВЫХ ПРЕДЛОЖЕНИЙ:")
-            for i, offer in enumerate(sorted_offers[:5], 1):
-                status = "⭐ ВЫБРАНО" if i == 1 else f"  #{i}"
-                logger.info(f"{status} | {offer.company_name} | {offer.price}₽ | {offer.delivery_days}дн | {offer.tariff_name}")
-            
-            # Все остальные предложения (если их больше 5)
-            if len(sorted_offers) > 5:
-                logger.info(f"📋 ОСТАЛЬНЫЕ ПРЕДЛОЖЕНИЯ ({len(sorted_offers) - 5}):")
-                for i, offer in enumerate(sorted_offers[5:], 6):
-                    logger.info(f"  #{i} | {offer.company_name} | {offer.price}₽ | {offer.delivery_days}дн | {offer.tariff_name}")
-            
-            logger.info(f"══════════════════════════════════════════════════════════")
+            if detailed_log:
+                # Детальное логирование (как было раньше)
+                logger.info(f"═══ ДЕТАЛЬНЫЙ СПИСОК ПРЕДЛОЖЕНИЙ ДЛЯ ВЕСА {weight}КГ ═══")
+                
+                # Статистика
+                prices = [offer.price for offer in sorted_offers]
+                min_price = min(prices)
+                max_price = max(prices)
+                avg_price = sum(prices) / len(prices)
+                
+                logger.info(f"📊 Статистика: {len(offers)} предложений, цены от {min_price}₽ до {max_price}₽ (среднее: {avg_price:.2f}₽)")
+                
+                # Топ-5 самых дешевых предложений
+                logger.info("🏆 ТОП-5 САМЫХ ДЕШЕВЫХ ПРЕДЛОЖЕНИЙ:")
+                for i, offer in enumerate(sorted_offers[:5], 1):
+                    status = "⭐ ВЫБРАНО" if i == 1 else f"  #{i}"
+                    logger.info(f"{status} | {offer.company_name} | {offer.price}₽ | {offer.delivery_days}дн | {offer.tariff_name}")
+                
+                # Все остальные предложения (если их больше 5)
+                if len(sorted_offers) > 5:
+                    logger.info(f"📋 ОСТАЛЬНЫЕ ПРЕДЛОЖЕНИЯ ({len(sorted_offers) - 5}):")
+                    for i, offer in enumerate(sorted_offers[5:], 6):
+                        logger.info(f"  #{i} | {offer.company_name} | {offer.price}₽ | {offer.delivery_days}дн | {offer.tariff_name}")
+                
+                logger.info(f"══════════════════════════════════════════════════════════")
+            else:
+                # Краткое логирование - одна строка с лучшим предложением
+                logger.info(f"📦 {weight}кг → {best_offer.company_name} | {best_offer.price}₽ | {best_offer.delivery_days}дн | {best_offer.tariff_name}")
         else:
             logger.warning(f"❌ Нет предложений для веса {weight}кг")
         

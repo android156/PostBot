@@ -22,17 +22,17 @@ logger = logging.getLogger(__name__)
 class ConfigManager(IConfig):
     """
     Конкретная реализация менеджера конфигурации.
-    
+
     Загружает настройки из переменных окружения и предоставляет
     их в удобном формате для других компонентов системы.
-    
+
     Поддерживает валидацию настроек и значения по умолчанию.
     """
 
     def __init__(self):
         """
         Инициализирует менеджер конфигурации.
-        
+
         Загружает все настройки из переменных окружения
         и проверяет их корректность.
         """
@@ -59,7 +59,8 @@ class ConfigManager(IConfig):
             'topex_delivery_method': '1',  # 1 = доставка до дверей
             # Фильтр категорий доставки (пустой список = без фильтрации)
             'delivery_filter':
-            ['До дверей']  # Например: ['До дверей', 'Дверь - Склад']
+            ['До дверей'],  # Например: ['До дверей', 'Дверь - Склад']
+            'detailed_log': True
         }
 
         # Загружаем настройки
@@ -70,7 +71,7 @@ class ConfigManager(IConfig):
     def get_telegram_token(self) -> Optional[str]:
         """
         Возвращает токен Telegram бота.
-        
+
         Returns:
             Optional[str]: Токен бота или None если не настроен
         """
@@ -82,7 +83,7 @@ class ConfigManager(IConfig):
     def get_api_credentials(self) -> Dict[str, str]:
         """
         Возвращает учетные данные для TOP-EX API.
-        
+
         Returns:
             Dict[str, str]: Словарь с учетными данными
         """
@@ -107,7 +108,7 @@ class ConfigManager(IConfig):
     def get_file_processing_settings(self) -> Dict[str, Any]:
         """
         Возвращает настройки для обработки файлов.
-        
+
         Returns:
             Dict[str, Any]: Настройки обработки файлов
         """
@@ -124,7 +125,7 @@ class ConfigManager(IConfig):
     def get_api_settings(self) -> Dict[str, Any]:
         """
         Возвращает настройки для работы с API.
-        
+
         Returns:
             Dict[str, Any]: Настройки API
         """
@@ -146,7 +147,7 @@ class ConfigManager(IConfig):
     def validate_configuration(self) -> bool:
         """
         Проверяет корректность всех настроек конфигурации.
-        
+
         Returns:
             bool: True если конфигурация корректна
         """
@@ -209,7 +210,7 @@ class ConfigManager(IConfig):
     def get_logging_settings(self) -> Dict[str, Any]:
         """
         Возвращает настройки логирования.
-        
+
         Returns:
             Dict[str, Any]: Настройки логирования
         """
@@ -229,10 +230,10 @@ class ConfigManager(IConfig):
     def get_weight_categories(self) -> list[float]:
         """
         Возвращает список весовых категорий для тестирования.
-        
+
         Дополнительный метод для получения весовых категорий,
         используемых при расчете стоимости доставки.
-        
+
         Returns:
             list[float]: Список весов в килограммах
         """
@@ -261,7 +262,7 @@ class ConfigManager(IConfig):
     def get_api_parameters(self) -> Dict[str, str]:
         """
         Возвращает статичные параметры для запросов к TOP-EX API.
-        
+
         Returns:
             Dict[str, str]: Словарь с параметрами API
         """
@@ -283,7 +284,7 @@ class ConfigManager(IConfig):
     def _load_configuration(self) -> None:
         """
         Загружает конфигурацию из переменных окружения.
-        
+
         Приватный метод для инициализации всех настроек
         при создании объекта конфигурации.
         """
@@ -297,7 +298,8 @@ class ConfigManager(IConfig):
             'TOPEX_API_BASE': os.getenv('TOPEX_API_BASE', 'default'),
             'MAX_FILE_SIZE': os.getenv('MAX_FILE_SIZE', 'default'),
             'API_TIMEOUT': os.getenv('API_TIMEOUT', 'default'),
-            'LOG_LEVEL': os.getenv('LOG_LEVEL', 'default')
+            'LOG_LEVEL': os.getenv('LOG_LEVEL', 'default'),
+            'DETAILED_LOG': os.getenv('DETAILED_LOG', 'default')
         }
 
         logger.info(f"Статус переменных окружения: {env_vars}")
@@ -305,9 +307,9 @@ class ConfigManager(IConfig):
     def to_dict(self) -> Dict[str, Any]:
         """
         Возвращает всю конфигурацию в виде словаря.
-        
+
         Полезно для отладки и логирования конфигурации.
-        
+
         Returns:
             Dict[str, Any]: Словарь со всеми настройками (без секретных данных)
         """
@@ -324,6 +326,7 @@ class ConfigManager(IConfig):
             'weight_categories': self.get_weight_categories(),
             'api_parameters': self.get_api_parameters(),
             'delivery_filter': self.get_delivery_filter(),
+            'detailed_log': self.get_detailed_log(),
             'is_valid': self.validate_configuration()
         }
 
@@ -332,9 +335,9 @@ class ConfigManager(IConfig):
     def get_delivery_filter(self) -> list[str]:
         """
         Возвращает список разрешенных типов доставки для фильтрации.
-        
+
         Если список пустой, фильтрация не применяется.
-        
+
         Returns:
             list[str]: Список разрешенных типов доставки
         """
@@ -350,8 +353,7 @@ class ConfigManager(IConfig):
                     if f.strip()
                 ]
                 logger.info(
-                    f"Используется настраиваемый фильтр доставки: {filter_list}"
-                )
+                    f"Используется настраиваемый фильтр доставки: {filter_list}")
                 return filter_list
             except ValueError as e:
                 logger.warning(
@@ -366,3 +368,52 @@ class ConfigManager(IConfig):
                 "Фильтр доставки не настроен (все предложения проходят)")
 
         return default_filter
+
+    def get_detailed_log(self) -> bool:
+        """
+        Возвращает настройку детального логирования.
+
+        Returns:
+            bool: True для детального логирования, False для краткого
+        """
+        detailed_log_str = os.getenv('DETAILED_LOG', '')
+        if detailed_log_str.lower() in ('false', '0', 'no', 'off'):
+            logger.info("Использую краткое логирование предложений")
+            return False
+
+        # По умолчанию используем детальное логирование
+        default_detailed_log = self._default_settings['detailed_log']
+        if detailed_log_str:
+            logger.info(f"Использую детальное логирование предложений: {default_detailed_log}")
+        else:
+            logger.debug(f"Использую детальное логирование по умолчанию: {default_detailed_log}")
+
+        return default_detailed_log
+
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Возвращает всю конфигурацию в виде словаря.
+
+        Полезно для отладки и логирования конфигурации.
+
+        Returns:
+            Dict[str, Any]: Словарь со всеми настройками (без секретных данных)
+        """
+        config = {
+            'telegram_token_set': bool(self.get_telegram_token()),
+            'api_credentials': {
+                'email_set': bool(self.get_api_credentials()['email']),
+                'password_set': bool(self.get_api_credentials()['password']),
+                'base_url': self.get_api_credentials()['base_url']
+            },
+            'file_processing': self.get_file_processing_settings(),
+            'api_settings': self.get_api_settings(),
+            'logging': self.get_logging_settings(),
+            'weight_categories': self.get_weight_categories(),
+            'api_parameters': self.get_api_parameters(),
+            'delivery_filter': self.get_delivery_filter(),
+            'detailed_log': self.get_detailed_log(),
+            'is_valid': self.validate_configuration()
+        }
+
+        return config
