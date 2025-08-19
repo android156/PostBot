@@ -70,6 +70,7 @@ class TopExApiClient(IApiClient):
         self._user_id = api_parameters['user_id']
         self._cargo_type = api_parameters['cargo_type']
         self._cargo_seats_number = api_parameters['cargo_seats_number']
+        self._delivery_method = api_parameters['delivery_method']
 
         logger.info(f"TopExApiClient инициализирован для {self._base_url}")
 
@@ -412,7 +413,8 @@ class TopExApiClient(IApiClient):
                 'attributes[recipient_city]': destination_code,
                 'attributes[cargo_type]': self._cargo_type,
                 'attributes[cargo_seats_number]': self._cargo_seats_number,
-                'attributes[cargo_weight]': str(weight)  # Вес в кг
+                'attributes[cargo_weight]': str(weight),  # Вес в кг
+                'attributes[delivery_method]': self._delivery_method  # 1 = доставка до дверей
             }
 
             logger.info(

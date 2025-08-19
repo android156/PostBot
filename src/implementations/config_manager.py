@@ -55,7 +55,8 @@ class ConfigManager(IConfig):
             # 'topex_cargo_type': '4aab1fc6-fc2b-473a-8728-58bcd4ff79ba',  # "груз"
             'topex_cargo_type':
             '81dd8a13-8235-494f-84fd-9c04c51d50ec',  # "документы
-            'topex_cargo_seats_number': '1'
+            'topex_cargo_seats_number': '1',
+            'topex_delivery_method': '1'  # 1 = доставка до дверей
         }
 
         # Загружаем настройки
@@ -270,7 +271,10 @@ class ConfigManager(IConfig):
                       self._default_settings['topex_cargo_type']),
             'cargo_seats_number':
             os.getenv('TOPEX_CARGO_SEATS_NUMBER',
-                      self._default_settings['topex_cargo_seats_number'])
+                      self._default_settings['topex_cargo_seats_number']),
+            'delivery_method':
+            os.getenv('TOPEX_DELIVERY_METHOD',
+                      self._default_settings['topex_delivery_method'])
         }
 
     def _load_configuration(self) -> None:
