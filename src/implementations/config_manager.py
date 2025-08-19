@@ -48,11 +48,13 @@ class ConfigManager(IConfig):
             'max_log_file_size': 50 * 1024 * 1024,  # 50 MB
             'topex_api_base': 'https://lk.top-ex.ru/api',
             # Весовые категории по умолчанию в килограммах
-            'weight_categories': [0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 30.0, ],
-            #'weight_categories': [0.5, ]
+            # 'weight_categories': [0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 30.0, ],
+            'weight_categories': [0.5, 1],
             # Статичные параметры API TOP-EX
             'topex_user_id': '14',
-            'topex_cargo_type': '4aab1fc6-fc2b-473a-8728-58bcd4ff79ba',  # "груз"
+            # 'topex_cargo_type': '4aab1fc6-fc2b-473a-8728-58bcd4ff79ba',  # "груз"
+            'topex_cargo_type':
+            '81dd8a13-8235-494f-84fd-9c04c51d50ec',  # "документы
             'topex_cargo_seats_number': '1'
         }
 
@@ -260,9 +262,15 @@ class ConfigManager(IConfig):
             Dict[str, str]: Словарь с параметрами API
         """
         return {
-            'user_id': os.getenv('TOPEX_USER_ID', self._default_settings['topex_user_id']),
-            'cargo_type': os.getenv('TOPEX_CARGO_TYPE', self._default_settings['topex_cargo_type']),
-            'cargo_seats_number': os.getenv('TOPEX_CARGO_SEATS_NUMBER', self._default_settings['topex_cargo_seats_number'])
+            'user_id':
+            os.getenv('TOPEX_USER_ID',
+                      self._default_settings['topex_user_id']),
+            'cargo_type':
+            os.getenv('TOPEX_CARGO_TYPE',
+                      self._default_settings['topex_cargo_type']),
+            'cargo_seats_number':
+            os.getenv('TOPEX_CARGO_SEATS_NUMBER',
+                      self._default_settings['topex_cargo_seats_number'])
         }
 
     def _load_configuration(self) -> None:
