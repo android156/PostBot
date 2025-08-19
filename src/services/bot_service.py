@@ -154,7 +154,7 @@ class BotService(IBotService):
             # Шаг 1: Валидация файла
             validation_result = await self._validate_uploaded_file(document)
             if not validation_result['valid']:
-                # await update.message.reply_text(validation_result['error_message'])
+                await update.message.reply_text(validation_result['error_message'])
                 return
             
             # Шаг 2: Уведомление о начале обработки
@@ -170,10 +170,11 @@ class BotService(IBotService):
                 f"📋 Найдено {len(routes_data)} маршрутов. Рассчитываю стоимость доставки..."
             )
             
-            # Шаг 4: Расчет стоимости доставки
-            calculation_results = await self.process_shipping_calculation(routes_data)
+            # Шаг 4: Расчет стоимости доставки с уведомлениями о прогрессе
+            calculation_results = await self.process_shipping_calculation(routes_data, update, processing_msg)
             
             # Шаг 5: Генерация файла с результатами
+            await processing_msg.edit_text("📄 Создаю файл с результатами...")
             result_file_path = await self._generate_result_file(calculation_results)
             
             # Шаг 6: Отправка результатов пользователю
@@ -187,7 +188,10 @@ class BotService(IBotService):
             
         except Exception as e:
             logger.error(f"Ошибка обработки файла от пользователя {user_id}: {e}")
-            # await self._send_error_message(update, f"Ошибка обработки файла: {str(e)}")
+            try:
+                await update.message.reply_text(f"❌ Ошибка обработки файла: {str(e)}")
+            except:
+                pass
     
     async def handle_text_message(self, update, context) -> None:
         """
@@ -217,7 +221,9 @@ class BotService(IBotService):
     
     async def process_shipping_calculation(
         self, 
-        routes_data: List[Dict[str, Any]]
+        routes_data: List[Dict[str, Any]],
+        update=None,
+        progress_message=None
     ) -> Dict[str, Any]:
         """
         Выполняет расчет стоимости доставки для списка маршрутов.
@@ -230,6 +236,8 @@ class BotService(IBotService):
         
         Args:
             routes_data (List[Dict[str, Any]]): Список маршрутов для расчета
+            update: Объект обновления Telegram для отправки уведомлений (опционально)
+            progress_message: Сообщение для редактирования прогресса (опционально)
             
         Returns:
             Dict[str, Any]: Результаты расчета для всех маршрутов
@@ -259,7 +267,28 @@ class BotService(IBotService):
                 
                 if not origin_code or not destination_code:
                     logger.warning(f"Пропускаю маршрут {route.get_display_name()} - не найдены коды городов")
+                    
+                    # Отправляем уведомление о пропуске маршрута
+                    if progress_message:
+                        remaining_routes = len(routes_with_codes) - route_index - 1
+                        skip_text = f"⚠️ Пропускаю маршрут {route.get_display_name()} (не найдены коды городов)\n"
+                        skip_text += f"📊 Обработано: {route_index + 1}/{len(routes_with_codes)}, осталось: {remaining_routes}"
+                        try:
+                            await progress_message.edit_text(skip_text)
+                        except:
+                            pass
                     continue
+                
+                # Отправляем уведомление о начале обработки текущего маршрута
+                if progress_message:
+                    remaining_routes = len(routes_with_codes) - route_index - 1
+                    current_text = f"🚀 Обрабатываю маршрут: {route.get_display_name()}\n"
+                    current_text += f"📊 Прогресс: {route_index + 1}/{len(routes_with_codes)}, осталось: {remaining_routes}\n"
+                    current_text += f"⚖️ Тестирую {len(self._weight_categories)} весовых категорий..."
+                    try:
+                        await progress_message.edit_text(current_text)
+                    except:
+                        pass
                 
                 logger.info(f"🚀 Начинаю асинхронный расчет для маршрута {route.get_display_name()} ({route_index + 1}/{len(routes_with_codes)})")
                 
@@ -277,12 +306,52 @@ class BotService(IBotService):
                     progress = (completed_calculations / total_calculations) * 100
                     logger.info(f"✅ Маршрут {route.get_display_name()} завершен. Прогресс: {progress:.1f}% ({completed_calculations}/{total_calculations})")
                     
+                    # Отправляем уведомление о завершении обработки маршрута
+                    if progress_message:
+                        remaining_routes = len(routes_with_codes) - route_index - 1
+                        success_text = f"✅ Завершен маршрут: {route.get_display_name()}\n"
+                        success_text += f"📊 Обработано: {route_index + 1}/{len(routes_with_codes)}"
+                        
+                        if remaining_routes > 0:
+                            success_text += f", осталось: {remaining_routes}\n"
+                            
+                            # Рассчитываем примерное время до завершения
+                            if route_index > 0:  # Избегаем деления на ноль
+                                avg_time_per_route = (datetime.now() - self._stats['start_time']).total_seconds() / (route_index + 1)
+                                estimated_time_left = avg_time_per_route * remaining_routes
+                                
+                                if estimated_time_left < 60:
+                                    success_text += f"⏱️ Примерно осталось: {int(estimated_time_left)} сек"
+                                else:
+                                    minutes = int(estimated_time_left // 60)
+                                    seconds = int(estimated_time_left % 60)
+                                    success_text += f"⏱️ Примерно осталось: {minutes} мин {seconds} сек"
+                        else:
+                            success_text += "\n🎉 Все маршруты обработаны!"
+                        
+                        try:
+                            await progress_message.edit_text(success_text)
+                        except:
+                            pass
+                    
                     # Добавляем задержку между маршрутами для rate limiting
                     if route_index < len(routes_with_codes) - 1:  # Не ждем после последнего маршрута
                         await asyncio.sleep(self._rate_limit_delay)
                 
             except Exception as e:
                 logger.error(f"Ошибка обработки маршрута {route_data}: {e}")
+                
+                # Отправляем уведомление об ошибке
+                if progress_message:
+                    route_name = route_data.get('origin', 'Неизвестно') + ' → ' + route_data.get('destination', 'Неизвестно')
+                    remaining_routes = len(routes_with_codes) - route_index - 1
+                    error_text = f"❌ Ошибка при обработке: {route_name}\n"
+                    error_text += f"📊 Обработано: {route_index + 1}/{len(routes_with_codes)}, осталось: {remaining_routes}"
+                    try:
+                        await progress_message.edit_text(error_text)
+                        await asyncio.sleep(2)  # Показываем ошибку 2 секунды
+                    except:
+                        pass
                 continue
         
         # Создаем общую сводку результатов
