@@ -61,7 +61,7 @@ class ConfigManager(IConfig):
             'delivery_filter':
             ['До дверей'],  # Например: ['До дверей', 'Дверь - Склад']
             'detailed_log': False,
-            'max_concurrent_requests': 50,  # Максимальное количество одновременных запросов
+            'max_concurrent_requests': 30,  # Максимальное количество одновременных запросов
         }
 
         # Загружаем настройки
