@@ -60,7 +60,7 @@ class ConfigManager(IConfig):
             # Фильтр категорий доставки (пустой список = без фильтрации)
             'delivery_filter':
             ['До дверей'],  # Например: ['До дверей', 'Дверь - Склад']
-            'detailed_log': True
+            'detailed_log': False,
         }
 
         # Загружаем настройки
