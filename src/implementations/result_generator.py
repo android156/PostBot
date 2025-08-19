@@ -76,6 +76,9 @@ class ExcelResultGenerator(IResultGenerator):
         if output_format not in self._supported_formats:
             raise ValueError(f"Неподдерживаемый формат: {output_format}")
         
+        if not calculation_results:
+            raise ValueError("Нет данных для создания файла результатов")
+        
         logger.info(f"Генерирую файл результатов в формате {output_format}")
         logger.info(f"Обрабатываю {len(calculation_results)} результатов расчетов")
         
@@ -89,6 +92,7 @@ class ExcelResultGenerator(IResultGenerator):
         temp_file.close()
         
         try:
+            # Основное создание файла
             if output_format == 'xlsx':
                 self._generate_excel_file(calculation_results, temp_file.name)
             elif output_format == 'csv':
@@ -96,14 +100,36 @@ class ExcelResultGenerator(IResultGenerator):
             elif output_format == 'json':
                 self._generate_json_file(calculation_results, temp_file.name)
             
-            logger.info(f"Файл результатов создан: {temp_file.name}")
+            # Проверяем, что файл действительно создан
+            if not Path(temp_file.name).exists():
+                raise ValueError("Файл не был создан")
+                
+            file_size = Path(temp_file.name).stat().st_size
+            if file_size == 0:
+                raise ValueError("Создан пустой файл")
+            
+            logger.info(f"Файл результатов создан: {temp_file.name} (размер: {file_size} байт)")
             return temp_file.name
             
         except Exception as e:
             # Удаляем временный файл при ошибке
-            Path(temp_file.name).unlink(missing_ok=True)
+            try:
+                Path(temp_file.name).unlink(missing_ok=True)
+                logger.debug(f"Удален поврежденный временный файл: {temp_file.name}")
+            except Exception as cleanup_error:
+                logger.warning(f"Не удалось удалить поврежденный файл: {cleanup_error}")
+            
             logger.error(f"Ошибка создания файла результатов: {e}")
-            raise
+            
+            # Пытаемся создать CSV как fallback
+            if output_format == 'xlsx':
+                try:
+                    logger.info("Пытаюсь создать CSV файл как резервный вариант...")
+                    return self.generate_result_file(calculation_results, 'csv')
+                except Exception as csv_error:
+                    logger.error(f"Не удалось создать резервный CSV файл: {csv_error}")
+            
+            raise ValueError(f"Не удалось создать файл результатов: {e}")
     
     def get_supported_formats(self) -> List[str]:
         """
@@ -191,27 +217,54 @@ class ExcelResultGenerator(IResultGenerator):
             results (List[Dict[str, Any]]): Результаты расчетов
             file_path (str): Путь к файлу для создания
         """
-        with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
-            # Создаем лист с общей сводкой
-            summary = self.create_summary_sheet(results)
-            summary_df = pd.DataFrame([summary])
-            summary_df.to_excel(writer, sheet_name='Сводка', index=False)
-            
-            # Создаем основной лист с результатами
-            main_data = self._prepare_main_data(results)
-            main_df = pd.DataFrame(main_data)
-            main_df.to_excel(writer, sheet_name='Результаты', index=False)
-            
-            # Создаем листы для каждой весовой категории
-            weight_categories = self._get_weight_categories(results)
-            for weight in weight_categories:
-                weight_data = self._prepare_weight_data(results, weight)
-                if weight_data:
-                    weight_df = pd.DataFrame(weight_data)
-                    sheet_name = f'Вес_{weight//1000}кг'
-                    weight_df.to_excel(writer, sheet_name=sheet_name, index=False)
-            
-            logger.info(f"Excel файл создан с {len(writer.sheets)} листами")
+        try:
+            # Создаем простой Excel файл без стилизации
+            with pd.ExcelWriter(file_path, engine='openpyxl', options={'remove_timezone': True}) as writer:
+                # Создаем лист с общей сводкой
+                try:
+                    summary = self.create_summary_sheet(results)
+                    summary_df = pd.DataFrame([summary])
+                    summary_df.to_excel(writer, sheet_name='Сводка', index=False)
+                    logger.debug("Лист 'Сводка' создан")
+                except Exception as e:
+                    logger.error(f"Ошибка создания листа 'Сводка': {e}")
+                
+                # Создаем основной лист с результатами
+                try:
+                    main_data = self._prepare_main_data(results)
+                    if main_data:
+                        main_df = pd.DataFrame(main_data)
+                        main_df.to_excel(writer, sheet_name='Результаты', index=False)
+                        logger.debug("Лист 'Результаты' создан")
+                    else:
+                        logger.warning("Нет данных для основного листа")
+                except Exception as e:
+                    logger.error(f"Ошибка создания листа 'Результаты': {e}")
+                
+                # Создаем листы для каждой весовой категории
+                try:
+                    weight_categories = self._get_weight_categories(results)
+                    for weight in weight_categories:
+                        try:
+                            weight_data = self._prepare_weight_data(results, weight)
+                            if weight_data:
+                                weight_df = pd.DataFrame(weight_data)
+                                sheet_name = f'Вес_{weight//1000}кг'
+                                weight_df.to_excel(writer, sheet_name=sheet_name, index=False)
+                                logger.debug(f"Лист '{sheet_name}' создан")
+                        except Exception as e:
+                            logger.error(f"Ошибка создания листа для веса {weight}: {e}")
+                            continue
+                except Exception as e:
+                    logger.error(f"Ошибка обработки весовых категорий: {e}")
+                
+                # Подсчитываем количество созданных листов
+                sheet_count = len(writer.sheets) if hasattr(writer, 'sheets') else 0
+                logger.info(f"Excel файл создан с {sheet_count} листами")
+                
+        except Exception as e:
+            logger.error(f"Критическая ошибка создания Excel файла: {e}")
+            raise ValueError(f"Не удалось создать Excel файл: {e}")
     
     def _generate_csv_file(self, results: List[Dict[str, Any]], file_path: str) -> None:
         """
@@ -253,43 +306,89 @@ class ExcelResultGenerator(IResultGenerator):
     
     def _prepare_main_data(self, results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
-        Подготавливает основные данные для файла результатов.
+        Подготавливает основные данные для файла результатов с валидацией.
         
         Args:
             results (List[Dict[str, Any]]): Результаты расчетов
             
         Returns:
-            List[Dict[str, Any]]: Подготовленные данные
+            List[Dict[str, Any]]: Подготовленные и валидированные данные
         """
         main_data = []
         
+        if not results:
+            logger.warning("Нет результатов для подготовки данных")
+            return main_data
+        
         for result in results:
-            route_info = result.get('route', {})
-            weight_results = result.get('weight_results', {})
-            
-            # Создаем строку для каждого веса
-            for weight, weight_data in weight_results.items():
-                cheapest_offer = weight_data.get('cheapest_offer')
+            try:
+                route_info = result.get('route', {})
+                weight_results = result.get('weight_results', {})
                 
-                row = {
-                    'Номер_строки': route_info.get('row_index', ''),
-                    'Откуда': route_info.get('origin', ''),
-                    'Куда': route_info.get('destination', ''),
-                    'Вес_кг': weight / 1000,
-                    'Статус': 'Успешно' if cheapest_offer else 'Ошибка',
-                    'Компания': cheapest_offer.get('company_name', '') if cheapest_offer else '',
-                    'Цена_руб': cheapest_offer.get('price', 0) if cheapest_offer else 0,
-                    'Срок_дней': cheapest_offer.get('delivery_days', 0) if cheapest_offer else 0,
-                    'Тариф': cheapest_offer.get('tariff_name', '') if cheapest_offer else '',
-                    'Цена_за_кг': cheapest_offer.get('price_per_kg', 0) if cheapest_offer else 0,
-                    'Количество_предложений': weight_data.get('offers_count', 0)
-                }
+                if not weight_results:
+                    logger.debug(f"Нет весовых результатов для маршрута: {route_info}")
+                    continue
                 
-                main_data.append(row)
+                # Создаем строку для каждого веса
+                for weight, weight_data in weight_results.items():
+                    try:
+                        cheapest_offer = weight_data.get('cheapest_offer')
+                        
+                        # Валидация и очистка данных
+                        row_index = self._safe_convert_int(route_info.get('row_index', 0))
+                        origin = self._safe_convert_str(route_info.get('origin', 'Не указано'))
+                        destination = self._safe_convert_str(route_info.get('destination', 'Не указано'))
+                        weight_kg = self._safe_convert_float(weight) / 1000 if isinstance(weight, (int, float)) else 0.0
+                        
+                        # Данные предложения с валидацией
+                        if cheapest_offer:
+                            company_name = self._safe_convert_str(cheapest_offer.get('company_name', 'Неизвестно'))
+                            price = self._safe_convert_float(cheapest_offer.get('price', 0))
+                            delivery_days = self._safe_convert_int(cheapest_offer.get('delivery_days', 0))
+                            tariff_name = self._safe_convert_str(cheapest_offer.get('tariff_name', ''))
+                            price_per_kg = self._safe_convert_float(cheapest_offer.get('price_per_kg', 0))
+                            status = 'Успешно'
+                        else:
+                            company_name = ''
+                            price = 0.0
+                            delivery_days = 0
+                            tariff_name = ''
+                            price_per_kg = 0.0
+                            status = 'Ошибка'
+                        
+                        offers_count = self._safe_convert_int(weight_data.get('offers_count', 0))
+                        
+                        row = {
+                            'Номер_строки': row_index,
+                            'Откуда': origin,
+                            'Куда': destination,
+                            'Вес_кг': weight_kg,
+                            'Статус': status,
+                            'Компания': company_name,
+                            'Цена_руб': price,
+                            'Срок_дней': delivery_days,
+                            'Тариф': tariff_name,
+                            'Цена_за_кг': price_per_kg,
+                            'Количество_предложений': offers_count
+                        }
+                        
+                        main_data.append(row)
+                        
+                    except Exception as e:
+                        logger.error(f"Ошибка обработки веса {weight} для маршрута {route_info}: {e}")
+                        continue
+                        
+            except Exception as e:
+                logger.error(f"Ошибка обработки результата: {e}")
+                continue
         
         # Сортируем по номеру строки и весу
-        main_data.sort(key=lambda x: (x.get('Номер_строки', 0), x.get('Вес_кг', 0)))
+        try:
+            main_data.sort(key=lambda x: (x.get('Номер_строки', 0), x.get('Вес_кг', 0)))
+        except Exception as e:
+            logger.error(f"Ошибка сортировки данных: {e}")
         
+        logger.info(f"Подготовлено {len(main_data)} строк данных")
         return main_data
     
     def _prepare_weight_data(
@@ -351,3 +450,72 @@ class ExcelResultGenerator(IResultGenerator):
             weights.update(weight_results.keys())
         
         return sorted(list(weights))
+    
+    def _safe_convert_str(self, value) -> str:
+        """
+        Безопасно конвертирует значение в строку.
+        
+        Args:
+            value: Значение для конвертации
+            
+        Returns:
+            str: Строковое представление значения
+        """
+        if value is None:
+            return ''
+        if isinstance(value, str):
+            return value.strip()
+        try:
+            return str(value).strip()
+        except Exception:
+            return ''
+    
+    def _safe_convert_float(self, value) -> float:
+        """
+        Безопасно конвертирует значение в float.
+        
+        Args:
+            value: Значение для конвертации
+            
+        Returns:
+            float: Числовое значение или 0.0
+        """
+        if value is None:
+            return 0.0
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, str):
+            try:
+                return float(value.replace(',', '.').replace(' ', ''))
+            except (ValueError, AttributeError):
+                return 0.0
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            return 0.0
+    
+    def _safe_convert_int(self, value) -> int:
+        """
+        Безопасно конвертирует значение в int.
+        
+        Args:
+            value: Значение для конвертации
+            
+        Returns:
+            int: Целое число или 0
+        """
+        if value is None:
+            return 0
+        if isinstance(value, int):
+            return value
+        if isinstance(value, float):
+            return int(value)
+        if isinstance(value, str):
+            try:
+                return int(float(value.replace(',', '.').replace(' ', '')))
+            except (ValueError, AttributeError):
+                return 0
+        try:
+            return int(float(value))
+        except (ValueError, TypeError):
+            return 0
