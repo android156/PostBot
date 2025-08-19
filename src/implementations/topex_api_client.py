@@ -536,6 +536,38 @@ class TopExApiClient(IApiClient):
         logger.info(
             f"Распарсено {len(offers)} предложений из {len(api_data)} элементов"
         )
+        
+        # Детальное логирование всех предложений для веса
+        if offers:
+            logger.info(f"═══ ДЕТАЛЬНЫЙ СПИСОК ПРЕДЛОЖЕНИЙ ДЛЯ ВЕСА {weight}КГ ═══")
+            
+            # Сортируем предложения по цене для наглядности
+            sorted_offers = sorted(offers, key=lambda x: x.price)
+            
+            # Статистика
+            prices = [offer.price for offer in sorted_offers]
+            min_price = min(prices)
+            max_price = max(prices)
+            avg_price = sum(prices) / len(prices)
+            
+            logger.info(f"📊 Статистика: {len(offers)} предложений, цены от {min_price}₽ до {max_price}₽ (среднее: {avg_price:.2f}₽)")
+            
+            # Топ-5 самых дешевых предложений
+            logger.info("🏆 ТОП-5 САМЫХ ДЕШЕВЫХ ПРЕДЛОЖЕНИЙ:")
+            for i, offer in enumerate(sorted_offers[:5], 1):
+                status = "⭐ ВЫБРАНО" if i == 1 else f"  #{i}"
+                logger.info(f"{status} | {offer.company_name} | {offer.price}₽ | {offer.delivery_days}дн | {offer.tariff_name}")
+            
+            # Все остальные предложения (если их больше 5)
+            if len(sorted_offers) > 5:
+                logger.info(f"📋 ОСТАЛЬНЫЕ ПРЕДЛОЖЕНИЯ ({len(sorted_offers) - 5}):")
+                for i, offer in enumerate(sorted_offers[5:], 6):
+                    logger.info(f"  #{i} | {offer.company_name} | {offer.price}₽ | {offer.delivery_days}дн | {offer.tariff_name}")
+            
+            logger.info(f"══════════════════════════════════════════════════════════")
+        else:
+            logger.warning(f"❌ Нет предложений для веса {weight}кг")
+        
         return offers
 
     async def _get_cached_cities(self, query: str = "") -> List[Dict[str, str]]:
