@@ -549,10 +549,20 @@ class BotService(IBotService):
             
             for offer_data in offers_data:
                 try:
+                    # Обрабатываем delivery_days с проверкой на строку "по запросу"
+                    delivery_days_raw = offer_data.get('delivery_days', 0)
+                    if delivery_days_raw == "по запросу" or delivery_days_raw is None:
+                        delivery_days = -1
+                    else:
+                        try:
+                            delivery_days = int(delivery_days_raw)
+                        except (ValueError, TypeError):
+                            delivery_days = -1
+                    
                     offer = ShippingOffer(
                         company_name=offer_data.get('company_name', ''),
                         price=float(offer_data.get('price', 0)),
-                        delivery_days=int(offer_data.get('delivery_days', 0)),
+                        delivery_days=delivery_days,
                         tariff_name=offer_data.get('tariff_name', ''),
                         weight=weight_in_grams,  # Используем вес в граммах
                         additional_info=offer_data.get('additional_info', {})
