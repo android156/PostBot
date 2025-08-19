@@ -34,7 +34,14 @@ from src.implementations.result_generator import ExcelResultGenerator
 from src.services.bot_service import BotService
 
 # Импорты Telegram Bot
-from telegram.ext import Application, CommandHandler, MessageHandler, filters
+try:
+    from telegram.ext import Application, CommandHandler, MessageHandler, filters
+except ImportError:
+    # Fallback если telegram не установлен корректно
+    Application = None
+    CommandHandler = None 
+    MessageHandler = None
+    filters = None
 
 
 class ApplicationContainer:
@@ -265,6 +272,7 @@ async def main():
     Инициализирует все компоненты и запускает основной цикл работы бота.
     """
     container = None
+    logger = logging.getLogger(__name__)
     
     try:
         # Создаем контейнер зависимостей
@@ -273,8 +281,6 @@ async def main():
         # Настраиваем логирование
         config = container.get_config()
         setup_logging(config)
-        
-        logger = logging.getLogger(__name__)
         logger.info("=" * 60)
         logger.info("Запуск Telegram бота для расчета стоимости доставки")
         logger.info("=" * 60)
@@ -301,6 +307,11 @@ async def main():
         
         # Получаем токен Telegram из конфигурации
         telegram_token = config.get_telegram_token()
+        
+        # Проверяем доступность Telegram библиотеки
+        if Application is None:
+            logger.error("Библиотека python-telegram-bot не доступна")
+            raise ImportError("python-telegram-bot не установлен корректно")
         
         # Создаем Telegram Application
         application = Application.builder().token(telegram_token).build()
@@ -339,10 +350,12 @@ async def main():
             await application.shutdown()
             
     except KeyboardInterrupt:
-        logger.info("Получен сигнал остановки от пользователя")
+        if 'logger' in locals():
+            logger.info("Получен сигнал остановки от пользователя")
         
     except Exception as e:
-        logger.error(f"Критическая ошибка приложения: {e}")
+        if 'logger' in locals():
+            logger.error(f"Критическая ошибка приложения: {e}")
         sys.exit(1)
         
     finally:
@@ -351,9 +364,11 @@ async def main():
             try:
                 await container.cleanup()
             except Exception as e:
-                logger.error(f"Ошибка при освобождении ресурсов: {e}")
+                if 'logger' in locals():
+                    logger.error(f"Ошибка при освобождении ресурсов: {e}")
         
-        logger.info("Приложение завершено")
+        if 'logger' in locals():
+            logger.info("Приложение завершено")
 
 
 def run():

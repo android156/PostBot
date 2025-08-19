@@ -102,3 +102,13 @@ class IConfig(ABC):
             list[float]: Список весов в килограммах
         """
         pass
+
+    @abstractmethod
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Возвращает всю конфигурацию в виде словаря.
+        
+        Returns:
+            Dict[str, Any]: Словарь со всеми настройками
+        """
+        pass
