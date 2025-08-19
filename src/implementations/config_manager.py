@@ -48,8 +48,8 @@ class ConfigManager(IConfig):
             'max_log_file_size': 50 * 1024 * 1024,  # 50 MB
             'topex_api_base': 'https://lk.top-ex.ru/api',
             # Весовые категории по умолчанию в килограммах
-            # 'weight_categories': [0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 30.0, ],
-            'weight_categories': [0.5, 1],
+            'weight_categories': [0.5, 1.0, 5.0, 10.0, 20.0, 30.0, ],
+            # 'weight_categories': [0.5, 1],
             # Статичные параметры API TOP-EX
             'topex_user_id': '14',
             # 'topex_cargo_type': '4aab1fc6-fc2b-473a-8728-58bcd4ff79ba',  # "груз"
@@ -58,7 +58,8 @@ class ConfigManager(IConfig):
             'topex_cargo_seats_number': '1',
             'topex_delivery_method': '1',  # 1 = доставка до дверей
             # Фильтр категорий доставки (пустой список = без фильтрации)
-            'delivery_filter': []  # Например: ['До дверей', 'Дверь - Склад']
+            'delivery_filter':
+            ['До дверей']  # Например: ['До дверей', 'Дверь - Склад']
         }
 
         # Загружаем настройки
@@ -349,7 +350,8 @@ class ConfigManager(IConfig):
                     if f.strip()
                 ]
                 logger.info(
-                    f"Используется настраиваемый фильтр доставки: {filter_list}")
+                    f"Используется настраиваемый фильтр доставки: {filter_list}"
+                )
                 return filter_list
             except ValueError as e:
                 logger.warning(
@@ -360,6 +362,7 @@ class ConfigManager(IConfig):
             logger.info(
                 f"Используется фильтр доставки по умолчанию: {default_filter}")
         else:
-            logger.info("Фильтр доставки не настроен (все предложения проходят)")
-        
+            logger.info(
+                "Фильтр доставки не настроен (все предложения проходят)")
+
         return default_filter
