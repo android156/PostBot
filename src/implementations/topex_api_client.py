@@ -57,6 +57,7 @@ class TopExApiClient(IApiClient):
         # Получаем настройки из конфигурации
         api_credentials = self._config.get_api_credentials()
         api_settings = self._config.get_api_settings()
+        api_parameters = self._config.get_api_parameters()
 
         self._email = api_credentials['email']
         self._password = api_credentials['password']
@@ -64,6 +65,11 @@ class TopExApiClient(IApiClient):
         self._timeout = api_settings['timeout']
         self._retry_count = api_settings['retry_count']
         self._rate_limit_delay = api_settings['rate_limit_delay']
+        
+        # Статичные параметры API
+        self._user_id = api_parameters['user_id']
+        self._cargo_type = api_parameters['cargo_type']
+        self._cargo_seats_number = api_parameters['cargo_seats_number']
 
         logger.info(f"TopExApiClient инициализирован для {self._base_url}")
 
@@ -399,13 +405,13 @@ class TopExApiClient(IApiClient):
             await self._ensure_session()
 
             calc_url = f"{self._base_url}/cse/calc"
-            # Новая структура параметров согласно реальному API
+            # Параметры запроса из конфигурации
             params = {
-                'attributes[user_id]': '14',  # Фиксированное значение вместо токена
+                'attributes[user_id]': self._user_id,
                 'attributes[sender_city]': origin_code,
                 'attributes[recipient_city]': destination_code,
-                'attributes[cargo_type]': '4aab1fc6-fc2b-473a-8728-58bcd4ff79ba',  # "груз"
-                'attributes[cargo_seats_number]': '1',  # Количество мест по умолчанию
+                'attributes[cargo_type]': self._cargo_type,
+                'attributes[cargo_seats_number]': self._cargo_seats_number,
                 'attributes[cargo_weight]': str(weight)  # Вес в кг
             }
 
