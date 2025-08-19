@@ -504,6 +504,13 @@ class TopExApiClient(IApiClient):
                 if delivery_days is None:
                     delivery_days = -1
                     logger.debug(f"Срок доставки для {company_name} не определен, установлен как 'по запросу'")
+                else:
+                    # Преобразуем в int только если значение не None
+                    try:
+                        delivery_days = int(delivery_days)
+                    except (ValueError, TypeError):
+                        delivery_days = -1
+                        logger.debug(f"Не удалось преобразовать срок доставки '{delivery_days}' для {company_name}, установлен как 'по запросу'")
                 
                 # Название тарифа
                 tariff_name = item.get('tariffName', 'Стандартный тариф')
@@ -518,7 +525,7 @@ class TopExApiClient(IApiClient):
                 offer = ShippingOffer(
                     company_name=company_name,
                     price=float(price),
-                    delivery_days=int(delivery_days),
+                    delivery_days=delivery_days,  # Уже int или -1
                     tariff_name=tariff_display,
                     weight=int(weight * 1000),  # Конвертируем кг в граммы для модели
                     additional_info={
