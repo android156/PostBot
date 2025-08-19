@@ -211,59 +211,30 @@ class ExcelResultGenerator(IResultGenerator):
     
     def _generate_excel_file(self, results: List[Dict[str, Any]], file_path: str) -> None:
         """
-        Генерирует Excel файл с результатами.
+        Генерирует простой Excel файл с результатами.
         
         Args:
             results (List[Dict[str, Any]]): Результаты расчетов
             file_path (str): Путь к файлу для создания
         """
         try:
-            # Создаем простой Excel файл без стилизации
-            with pd.ExcelWriter(file_path, engine='openpyxl', options={'remove_timezone': True}) as writer:
-                # Создаем лист с общей сводкой
-                try:
-                    summary = self.create_summary_sheet(results)
-                    summary_df = pd.DataFrame([summary])
-                    summary_df.to_excel(writer, sheet_name='Сводка', index=False)
-                    logger.debug("Лист 'Сводка' создан")
-                except Exception as e:
-                    logger.error(f"Ошибка создания листа 'Сводка': {e}")
-                
-                # Создаем основной лист с результатами
-                try:
-                    main_data = self._prepare_main_data(results)
-                    if main_data:
-                        main_df = pd.DataFrame(main_data)
-                        main_df.to_excel(writer, sheet_name='Результаты', index=False)
-                        logger.debug("Лист 'Результаты' создан")
-                    else:
-                        logger.warning("Нет данных для основного листа")
-                except Exception as e:
-                    logger.error(f"Ошибка создания листа 'Результаты': {e}")
-                
-                # Создаем листы для каждой весовой категории
-                try:
-                    weight_categories = self._get_weight_categories(results)
-                    for weight in weight_categories:
-                        try:
-                            weight_data = self._prepare_weight_data(results, weight)
-                            if weight_data:
-                                weight_df = pd.DataFrame(weight_data)
-                                sheet_name = f'Вес_{weight//1000}кг'
-                                weight_df.to_excel(writer, sheet_name=sheet_name, index=False)
-                                logger.debug(f"Лист '{sheet_name}' создан")
-                        except Exception as e:
-                            logger.error(f"Ошибка создания листа для веса {weight}: {e}")
-                            continue
-                except Exception as e:
-                    logger.error(f"Ошибка обработки весовых категорий: {e}")
-                
-                # Подсчитываем количество созданных листов
-                sheet_count = len(writer.sheets) if hasattr(writer, 'sheets') else 0
-                logger.info(f"Excel файл создан с {sheet_count} листами")
-                
+            # Подготавливаем простые данные
+            simple_data = self._prepare_simple_data(results)
+            
+            if not simple_data:
+                raise ValueError("Нет данных для создания файла")
+            
+            # Создаем DataFrame
+            df = pd.DataFrame(simple_data)
+            
+            # Создаем простой Excel файл
+            with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
+                df.to_excel(writer, sheet_name='Результаты', index=False)
+            
+            logger.info(f"Простой Excel файл создан с {len(simple_data)} строками")
+            
         except Exception as e:
-            logger.error(f"Критическая ошибка создания Excel файла: {e}")
+            logger.error(f"Ошибка создания простого Excel файла: {e}")
             raise ValueError(f"Не удалось создать Excel файл: {e}")
     
     def _generate_csv_file(self, results: List[Dict[str, Any]], file_path: str) -> None:
@@ -303,6 +274,76 @@ class ExcelResultGenerator(IResultGenerator):
             json.dump(output_data, f, ensure_ascii=False, indent=2)
         
         logger.info("JSON файл создан")
+    
+    def _prepare_simple_data(self, results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Подготавливает простые данные для Excel файла.
+        
+        Args:
+            results (List[Dict[str, Any]]): Результаты расчетов
+            
+        Returns:
+            List[Dict[str, Any]]: Простые данные для Excel
+        """
+        simple_data = []
+        
+        if not results:
+            logger.warning("Нет результатов для подготовки простых данных")
+            return simple_data
+        
+        for result in results:
+            try:
+                route_info = result.get('route', {})
+                weight_results = result.get('weight_results', {})
+                
+                origin = self._safe_convert_str(route_info.get('origin', 'Не указано'))
+                destination = self._safe_convert_str(route_info.get('destination', 'Не указано'))
+                route_name = f"{origin} → {destination}"
+                
+                if not weight_results:
+                    # Если нет результатов, добавляем строку с ошибкой
+                    simple_data.append({
+                        'Маршрут': route_name,
+                        'Вес_кг': 0.0,
+                        'Компания': 'Ошибка расчета',
+                        'Цена_руб': 0.0,
+                        'Срок_дней': 0
+                    })
+                    continue
+                
+                # Создаем строку для каждого веса
+                for weight, weight_data in weight_results.items():
+                    try:
+                        weight_kg = self._safe_convert_float(weight) / 1000 if isinstance(weight, (int, float)) else 0.0
+                        cheapest_offer = weight_data.get('cheapest_offer')
+                        
+                        if cheapest_offer:
+                            company_name = self._safe_convert_str(cheapest_offer.get('company_name', 'Неизвестно'))
+                            price = self._safe_convert_float(cheapest_offer.get('price', 0))
+                            delivery_days = self._safe_convert_int(cheapest_offer.get('delivery_days', 0))
+                        else:
+                            company_name = 'Нет предложений'
+                            price = 0.0
+                            delivery_days = 0
+                        
+                        simple_data.append({
+                            'Маршрут': route_name,
+                            'Вес_кг': weight_kg,
+                            'Компания': company_name,
+                            'Цена_руб': price,
+                            'Срок_дней': delivery_days
+                        })
+                        
+                    except Exception as e:
+                        logger.error(f"Ошибка обработки веса {weight}: {e}")
+                        continue
+                        
+            except Exception as e:
+                logger.error(f"Ошибка обработки результата: {e}")
+                continue
+        
+        logger.info(f"Подготовлено {len(simple_data)} простых строк данных")
+        return simple_data
     
     def _prepare_main_data(self, results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
