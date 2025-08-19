@@ -131,11 +131,7 @@ class TopExApiClient(IApiClient):
             Dict[str, Any]: Результат расчета с предложениями
         """
         try:
-            # Проверяем аутентификацию
-            if not await self.is_authenticated():
-                if not await self.authenticate():
-                    return self._create_error_result(
-                        "Ошибка аутентификации", "Не удалось войти в систему")
+            # Для нового формата API аутентификация не требуется - используется attributes[user_id]
 
             # Находим коды городов, если переданы названия
             origin_code = await self._resolve_city_code(origin)
@@ -340,11 +336,14 @@ class TopExApiClient(IApiClient):
             await self._ensure_session()
 
             calc_url = f"{self._base_url}/cse/calc"
+            # Новая структура параметров согласно реальному API
             params = {
-                'authToken': self._auth_token,
-                'from': origin_code,
-                'to': destination_code,
-                'weight': weight
+                'attributes[user_id]': '14',  # Фиксированное значение вместо токена
+                'attributes[sender_city]': origin_code,
+                'attributes[recipient_city]': destination_code,
+                'attributes[cargo_type]': '4aab1fc6-fc2b-473a-8728-58bcd4ff79ba',  # "груз"
+                'attributes[cargo_seats_number]': '1',  # Количество мест по умолчанию
+                'attributes[cargo_weight]': str(weight)  # Вес в кг
             }
 
             logger.info(
