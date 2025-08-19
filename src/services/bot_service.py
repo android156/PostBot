@@ -268,8 +268,8 @@ class BotService(IBotService):
                     try:
                         logger.info(f"Расчет для {route.get_display_name()}, вес {weight}кг")
                         
-                        # Вызываем API для расчета с готовыми кодами городов
-                        api_result = await self._api_client.calculate_shipping_cost(
+                        # Используем оптимизированный метод прямого расчета с готовыми кодами
+                        api_result = await self._api_client.calculate_shipping_cost_with_codes(
                             origin_code, destination_code, weight
                         )
                         

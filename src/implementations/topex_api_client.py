@@ -131,8 +131,6 @@ class TopExApiClient(IApiClient):
             Dict[str, Any]: Результат расчета с предложениями
         """
         try:
-            # Для нового формата API аутентификация не требуется - используется attributes[user_id]
-
             # Находим коды городов, если переданы названия
             origin_code = await self._resolve_city_code(origin)
             destination_code = await self._resolve_city_code(destination)
@@ -149,17 +147,71 @@ class TopExApiClient(IApiClient):
                     f"Не найдены коды городов {', '.join(missing_cities)}")
 
             # Выполняем расчет стоимости
-            calculation_result = await self._perform_calculation(
-                origin_code, destination_code, weight)
-
-            # Добавляем задержку для соблюдения rate limit
-            await asyncio.sleep(self._rate_limit_delay)
-
-            return calculation_result
+            return await self._calculate_with_codes(origin_code, destination_code, weight)
 
         except Exception as e:
             logger.error(f"Ошибка расчета стоимости доставки: {e}")
             return self._create_error_result("Ошибка расчета", str(e))
+
+    async def calculate_shipping_cost_with_codes(self, origin_code: str, destination_code: str,
+                                               weight: float) -> Dict[str, Any]:
+        """
+        Рассчитывает стоимость доставки с готовыми кодами городов.
+        
+        Оптимизированный метод для случаев, когда коды городов уже получены.
+        Не выполняет резолв кодов, сразу переходит к расчету.
+        
+        Args:
+            origin_code (str): Код города отправления
+            destination_code (str): Код города назначения
+            weight (float): Вес груза в килокилограммах
+            
+        Returns:
+            Dict[str, Any]: Результат расчета с предложениями
+        """
+        try:
+            logger.debug(f"Прямой расчет с кодами: {origin_code} -> {destination_code}, {weight}кг")
+            
+            # Валидация кодов городов
+            if not origin_code or not destination_code:
+                missing_codes = []
+                if not origin_code:
+                    missing_codes.append("отправления")
+                if not destination_code:
+                    missing_codes.append("назначения")
+
+                return self._create_error_result(
+                    "Отсутствуют коды городов",
+                    f"Не переданы коды городов {', '.join(missing_codes)}")
+
+            # Выполняем расчет стоимости напрямую
+            return await self._calculate_with_codes(origin_code, destination_code, weight)
+
+        except Exception as e:
+            logger.error(f"Ошибка прямого расчета стоимости доставки: {e}")
+            return self._create_error_result("Ошибка расчета", str(e))
+
+    async def _calculate_with_codes(self, origin_code: str, destination_code: str,
+                                  weight: float) -> Dict[str, Any]:
+        """
+        Внутренний метод для выполнения расчета с готовыми кодами.
+        
+        Args:
+            origin_code (str): Код города отправления
+            destination_code (str): Код города назначения
+            weight (float): Вес груза в килокилограммах
+            
+        Returns:
+            Dict[str, Any]: Результат расчета
+        """
+        # Выполняем расчет стоимости
+        calculation_result = await self._perform_calculation(
+            origin_code, destination_code, weight)
+
+        # Добавляем задержку для соблюдения rate limit
+        await asyncio.sleep(self._rate_limit_delay)
+
+        return calculation_result
 
     async def get_available_cities(self, query: str = "") -> List[Dict[str, str]]:
         """
