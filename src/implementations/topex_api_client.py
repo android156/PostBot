@@ -250,7 +250,7 @@ class TopExApiClient(IApiClient):
         """
         Преобразует название города или код в код города.
         
-        Если передан код (числовая строка), возвращает его как есть.
+        Если передан код (UUID или числовая строка), возвращает его как есть.
         Если передано название, ищет код через API TOP-EX.
         
         Args:
@@ -259,10 +259,20 @@ class TopExApiClient(IApiClient):
         Returns:
             Optional[str]: Код города или None если не найден
         """
-        # Проверяем, не является ли входная строка уже кодом
+        # Проверяем, не является ли входная строка уже кодом (UUID или числовая строка)
         if city_input.isdigit():
-            logger.debug(f"Получен код города: {city_input}")
+            logger.debug(f"Получен числовой код города: {city_input}")
             return city_input
+        
+        # Проверяем, не является ли это UUID (формат: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+        if len(city_input) == 36 and city_input.count('-') == 4:
+            # Дополнительная проверка на валидность UUID
+            parts = city_input.split('-')
+            if (len(parts) == 5 and 
+                len(parts[0]) == 8 and len(parts[1]) == 4 and len(parts[2]) == 4 and 
+                len(parts[3]) == 4 and len(parts[4]) == 12):
+                logger.debug(f"Получен UUID код города: {city_input}")
+                return city_input
 
         # Нормализуем название для поиска
         normalized_input = self._normalize_city_name(city_input)
