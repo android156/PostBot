@@ -621,6 +621,13 @@ class BotService(IBotService):
             results (Dict[str, Any]): Данные результатов
         """
         try:
+            # Проверяем файл перед отправкой
+            if not self._validate_result_file(result_file_path):
+                logger.error(f"Файл {result_file_path} поврежден, создаю CSV")
+                # Создаем CSV как fallback
+                csv_path = await self._create_csv_fallback(results)
+                result_file_path = csv_path
+            
             summary = results.get('summary', {})
             
             # Формируем текст с кратким отчетом
@@ -636,12 +643,21 @@ class BotService(IBotService):
 📋 Подробные результаты во вложенном Excel файле.
             """.strip()
             
-            # Отправляем файл
-            await update.message.reply_document(
-                document=InputFile(result_file_path, filename="shipping_results.xlsx"),
-                caption=report_text,
-                parse_mode=ParseMode.MARKDOWN
-            )
+            # Определяем имя файла и MIME-тип
+            if result_file_path.endswith('.csv'):
+                filename = "shipping_results.csv"
+                report_text += "\n\n📝 *Файл отправлен в формате CSV для лучшей совместимости*"
+            else:
+                filename = "shipping_results.xlsx"
+            
+            # Отправляем файл с явным указанием параметров
+            with open(result_file_path, 'rb') as file:
+                await update.message.reply_document(
+                    document=file,
+                    filename=filename,
+                    caption=report_text,
+                    parse_mode=ParseMode.MARKDOWN
+                )
             
             logger.info("Результаты успешно отправлены пользователю")
             
@@ -659,6 +675,75 @@ class BotService(IBotService):
                 await update.message.reply_text("❌ Произошла ошибка при отправке результатов. Попробуйте еще раз.")
             except:
                 pass
+    
+    def _validate_result_file(self, file_path: str) -> bool:
+        """
+        Проверяет целостность созданного файла результатов.
+        
+        Args:
+            file_path (str): Путь к файлу для проверки
+            
+        Returns:
+            bool: True если файл корректен
+        """
+        try:
+            from pathlib import Path
+            
+            file_obj = Path(file_path)
+            if not file_obj.exists():
+                logger.error(f"Файл не существует: {file_path}")
+                return False
+            
+            file_size = file_obj.stat().st_size
+            if file_size < 1000:  # Excel файл должен быть больше 1KB
+                logger.error(f"Файл слишком мал: {file_size} байт")
+                return False
+            
+            # Проверяем, что это действительно Excel файл
+            if file_path.endswith('.xlsx'):
+                try:
+                    from openpyxl import load_workbook
+                    wb = load_workbook(file_path, read_only=True)
+                    ws = wb.active
+                    if ws.max_row < 2:  # Должно быть заголовки + данные
+                        logger.error("Excel файл пуст или содержит только заголовки")
+                        return False
+                    wb.close()
+                    logger.info(f"Excel файл прошел валидацию: {file_size} байт, {ws.max_row} строк")
+                    return True
+                except Exception as e:
+                    logger.error(f"Ошибка чтения Excel файла: {e}")
+                    return False
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Ошибка валидации файла: {e}")
+            return False
+    
+    async def _create_csv_fallback(self, results: Dict[str, Any]) -> str:
+        """
+        Создает CSV файл как резервный вариант если Excel не работает.
+        
+        Args:
+            results (Dict[str, Any]): Данные результатов
+            
+        Returns:
+            str: Путь к созданному CSV файлу
+        """
+        try:
+            results_data = results.get('results', [])
+            csv_path = self._result_generator.generate_result_file(
+                results_data, 
+                output_format='csv'
+            )
+            
+            logger.info(f"Создан CSV файл как fallback: {csv_path}")
+            return csv_path
+            
+        except Exception as e:
+            logger.error(f"Ошибка создания CSV fallback: {e}")
+            raise
     
     # async def _send_error_message(self, update, error_message: str) -> None:
     #     """
