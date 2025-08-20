@@ -29,3 +29,7 @@ args = "python src/main.py"
 
 [agent]
 expertMode = true
+
+[deployment]
+deploymentTarget = "cloudrun"
+run = ["sh", "-c", "python src/main.py"]
