@@ -11,6 +11,7 @@
 """
 import os
 import logging
+from logging.handlers import RotatingFileHandler
 from typing import Optional, Dict, Any
 from pathlib import Path
 
@@ -45,7 +46,8 @@ class ConfigManager(IConfig):
             'temp_dir': '/tmp',
             'log_level': 'INFO',
             'log_file': 'bot.log',
-            'max_log_file_size': 50 * 1024 * 1024,  # 50 MB
+            'max_log_file_size': 4 * 1024 * 1024,  # 4 MB
+            'log_backup_count': 10,  # Количество backup-файлов
             'topex_api_base': 'https://lk.top-ex.ru/api',
             # Весовые категории по умолчанию в килограммах
             'weight_categories': [0.5, 1.0, 5.0, 10.0, 20.0, 30.0, ],
@@ -225,7 +227,11 @@ class ConfigManager(IConfig):
             'max_file_size':
             int(
                 os.getenv('MAX_LOG_FILE_SIZE',
-                          str(self._default_settings['max_log_file_size'])))
+                          str(self._default_settings['max_log_file_size']))),
+            'backup_count':
+            int(
+                os.getenv('LOG_BACKUP_COUNT',
+                          str(self._default_settings['log_backup_count'])))
         }
 
     def get_weight_categories(self) -> list[float]:
