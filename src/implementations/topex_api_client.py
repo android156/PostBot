@@ -354,6 +354,16 @@ class TopExApiClient(IApiClient):
             city = cities[0]
             city_code = city.get('id') or city.get('code')
             city_name = city.get('name', '')
+            
+            # Логируем неточное совпадение с количеством вариантов и первыми тремя
+            logger.warning(f"⚠️ Неточное совпадение для города '{city_input}'. Найдено вариантов: {len(cities)}")
+            logger.info(f"🎯 Первые 3 варианта:")
+            for i, alternative in enumerate(cities[:3], 1):
+                alt_name = alternative.get('name', '')
+                alt_code = alternative.get('id') or alternative.get('code')
+                status = "✅ ВЫБРАН" if i == 1 else f"   #{i}"
+                logger.info(f"{status} | {alt_name} | {alt_code}")
+            
             logger.info(f"Найден код для города '{city_input}' -> '{city_name}': {city_code}")
             return str(city_code)
 
@@ -375,14 +385,30 @@ class TopExApiClient(IApiClient):
                 return str(city_code)
 
         # Ищем частичное совпадение в общем кеше
+        partial_matches = []
         for city in all_cities:
             city_name = city.get('name', '')
             normalized_city = self._normalize_city_name(city_name)
 
             if normalized_input in normalized_city or normalized_city in normalized_input:
-                city_code = city.get('id') or city.get('code')
-                logger.info(f"Найден частичный код в кеше для города '{city_input}' -> '{city_name}': {city_code}")
-                return str(city_code)
+                partial_matches.append(city)
+        
+        if partial_matches:
+            # Логируем неточное совпадение для частичных результатов
+            city = partial_matches[0]
+            city_code = city.get('id') or city.get('code')
+            city_name = city.get('name', '')
+            
+            logger.warning(f"⚠️ Частичное совпадение для города '{city_input}'. Найдено вариантов: {len(partial_matches)}")
+            logger.info(f"🎯 Первые 3 варианта:")
+            for i, alternative in enumerate(partial_matches[:3], 1):
+                alt_name = alternative.get('name', '')
+                alt_code = alternative.get('id') or alternative.get('code')
+                status = "✅ ВЫБРАН" if i == 1 else f"   #{i}"
+                logger.info(f"{status} | {alt_name} | {alt_code}")
+            
+            logger.info(f"Найден частичный код в кеше для города '{city_input}' -> '{city_name}': {city_code}")
+            return str(city_code)
 
         logger.warning(f"Код для города '{city_input}' не найден в базе TOP-EX")
         return None
