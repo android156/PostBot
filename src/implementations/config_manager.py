@@ -53,7 +53,6 @@ class ConfigManager(IConfig):
             'weight_categories': [0.5, 1.0, 5.0, 10.0, 20.0, 30.0, ],
             # 'weight_categories': [0.5, 1],
             # Статичные параметры API TOP-EX
-            'topex_user_id': '14',
             # 'topex_cargo_type': '4aab1fc6-fc2b-473a-8728-58bcd4ff79ba',  # "груз"
             'topex_cargo_type':
             '81dd8a13-8235-494f-84fd-9c04c51d50ec',  # "документы
@@ -274,9 +273,6 @@ class ConfigManager(IConfig):
             Dict[str, str]: Словарь с параметрами API
         """
         return {
-            'user_id':
-            os.getenv('TOPEX_USER_ID',
-                      self._default_settings['topex_user_id']),
             'cargo_type':
             os.getenv('TOPEX_CARGO_TYPE',
                       self._default_settings['topex_cargo_type']),

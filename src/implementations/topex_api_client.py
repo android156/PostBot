@@ -67,7 +67,6 @@ class TopExApiClient(IApiClient):
         self._rate_limit_delay = api_settings['rate_limit_delay']
         
         # Статичные параметры API
-        self._user_id = api_parameters['user_id']
         self._cargo_type = api_parameters['cargo_type']
         self._cargo_seats_number = api_parameters['cargo_seats_number']
         self._delivery_method = api_parameters['delivery_method']
@@ -429,12 +428,20 @@ class TopExApiClient(IApiClient):
 
         """
         try:
+            # Проверяем наличие токена авторизации
+            if not self._raw_auth_token:
+                logger.error("Отсутствует токен авторизации для выполнения расчета")
+                return self._create_error_result(
+                    "Ошибка авторизации", 
+                    "Необходимо выполнить авторизацию перед расчетом стоимости"
+                )
+            
             await self._ensure_session()
 
             calc_url = f"{self._base_url}/cse/calc"
-            # Параметры запроса из конфигурации
+            # Параметры запроса с токеном авторизации
             params = {
-                'attributes[user_id]': self._user_id,
+                'authToken': self._raw_auth_token,  # Токен авторизации
                 'attributes[sender_city]': origin_code,
                 'attributes[recipient_city]': destination_code,
                 'attributes[cargo_type]': self._cargo_type,
