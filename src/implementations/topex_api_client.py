@@ -284,6 +284,31 @@ class TopExApiClient(IApiClient):
         # Проверяем, не истек ли токен (с учетом буфера)
         return current_time < (self._token_expires_at - self._token_buffer)
 
+    async def _ensure_valid_token(self) -> bool:
+        """
+        Обеспечивает наличие валидного токена авторизации.
+        
+        Проверяет токен и автоматически обновляет его при необходимости.
+        
+        Returns:
+            bool: True если токен валиден или успешно обновлен, False в случае ошибки
+        """
+        # Проверяем наличие валидного токена
+        if await self.is_authenticated():
+            return True
+        
+        # Токен отсутствует или истёк - выполняем повторную аутентификацию
+        logger.warning("Токен авторизации истёк или отсутствует, выполняю повторную аутентификацию...")
+        
+        auth_success = await self.authenticate()
+        
+        if auth_success:
+            logger.info("Токен авторизации успешно обновлён")
+            return True
+        else:
+            logger.error("Не удалось обновить токен авторизации")
+            return False
+
     async def close(self) -> None:
         """
         Закрывает HTTP сессию и освобождает ресурсы.
@@ -428,12 +453,12 @@ class TopExApiClient(IApiClient):
 
         """
         try:
-            # Проверяем наличие токена авторизации
-            if not self._raw_auth_token:
-                logger.error("Отсутствует токен авторизации для выполнения расчета")
+            # Обеспечиваем наличие валидного токена (автоматически обновляем если нужно)
+            if not await self._ensure_valid_token():
+                logger.error("Не удалось получить валидный токен авторизации")
                 return self._create_error_result(
                     "Ошибка авторизации", 
-                    "Необходимо выполнить авторизацию перед расчетом стоимости"
+                    "Не удалось выполнить авторизацию для расчета стоимости"
                 )
             
             await self._ensure_session()
